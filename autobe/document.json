@@ -1,0 +1,1994 @@
+{
+  "operations": [
+    {
+      "specification": "List (search and paginate) all users in the discussion board system. Based on the 'users' table in Prisma, this endpoint allows querying users with optional filters like role, status, createdAt, etc., and supports pagination as well as basic search (username/email). Utilizes full Prisma schema column details and relationship to 'user_roles'.",
+      "description": "This operation returns a paginated and filtered list of users registered on the discussion board. Users may be searched by username, email, user role, or status, and results are sorted and paginated according to the provided parameters. The endpoint refers to the users table, whose structure includes fields for username, email, bio, role reference, password hash, timestamps, and status. Filters can help administrators or moderators locate specific accounts, monitor new signups, or audit activity. Security is enforced: only users with moderator or administrator roles can access or use advanced filters.\n\nThe endpoint applies business rules from the requirements, such as hiding sensitive (e.g., password) information, and supports relations to user_roles for displaying or filtering by user type. Pagination and sorting follow best practices for usability and performance. Related endpoints: create (POST), retrieve detail (GET), update (PUT), and delete (DELETE) for users.\n\nError handling ensures invalid queries, unauthorized access, or database issues are managed gracefully, returning clear status codes and messages. Sensitive data, such as password hashes, is never included in responses.",
+      "summary": "Retrieve a paginated, filterable list of users (core.users table).",
+      "parameters": [],
+      "requestBody": {
+        "description": "Filtering, sorting, and pagination info for user listing request.",
+        "typeName": "IUser.IRequest"
+      },
+      "responseBody": {
+        "description": "A paginated set of user summaries matching the search conditions, with profile and role info (never includes sensitive authentication fields).",
+        "typeName": "IPageIUser.ISummary"
+      },
+      "path": "/core/users",
+      "method": "patch"
+    },
+    {
+      "specification": "Get a single user's full details, referencing the 'users' table in the Prisma schema. Returns profile and role info for one specific user by ID. Supports full audit trail and profile viewing needs.",
+      "description": "This operation retrieves the full profile and related information for a specific user, identified by their unique user ID. Fields returned follow the schema comments: username, email, bio, status, timestamps, and a reference to their user role. User roles are resolved to human-readable labels where appropriate.\n\nSensitive fields such as password_hash are never returned. This endpoint is typically used by administrators for user management, or by users to view their own account details. Where authorized, moderators may use this endpoint for resolving moderation cases or audits. The data aligns exactly with the users table comments and model.\n\nRelated endpoints include listing (PATCH), creation (POST), update (PUT), and deletion (DELETE) for users. Error handling covers not found, unauthorized, or forbidden cases, always giving appropriate error codes and minimal leak of protected info.",
+      "summary": "Retrieve detailed profile info for a specific user (core.users table).",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Target user's ID (UUID).",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseBody": {
+        "description": "Full user profile detail with relevant account and role information, excluding authentication secrets.",
+        "typeName": "IUser"
+      },
+      "path": "/core/users/{id}",
+      "method": "get"
+    },
+    {
+      "specification": "Create a new user account in the discussion board, corresponding to the 'users' table. Involves validation of unique usernames/emails and correct user role assignment, following Prisma schema and requirements. Typical use: user registration or admin account creation.",
+      "description": "This operation handles new user registration or administrator-created user accounts. It accepts all required and optional fields per the users model: username, email, bio (optional), status, and an associated user_role_id. Passwords are securely hashed before saving, never stored in plain text.\n\nUnique constraints are enforced for both username and email to prevent duplicates. The user role must point to an existing role defined in user_roles. Timestamps for creation and update are handled automatically. Successful creation returns the newly registered user's public profile and role association (never the password hash).\n\nSecurity and validation reflect business rules, e.g., email visibility, profile privacy, and initial status setting. Input errors or duplicates return clear messages and codes. Related endpoints: list (PATCH), read (GET), update (PUT), delete (DELETE).",
+      "summary": "Register a new user (core.users table).",
+      "parameters": [],
+      "requestBody": {
+        "description": "Registration info for the new user, including username, email, password, user role, etc.",
+        "typeName": "IUser.ICreate"
+      },
+      "responseBody": {
+        "description": "Full profile of the newly created user, including assigned role, minus authentication secrets.",
+        "typeName": "IUser"
+      },
+      "path": "/core/users",
+      "method": "post"
+    },
+    {
+      "specification": "Update all editable profile fields for an existing user, mapping to the 'users' table. Typical use cases: user updates their profile, moderators/admins change user roles, update status, or correct information.",
+      "description": "Updates an existing user's information, addressing fields in the users schema, such as username, email, bio, role, status, and update timestamp. The input must include the user ID and only permitted fields are updateable. Username/email uniqueness is enforced on update as well. Moderators/administrators can change roles/statuses as permitted by business rules.\n\nThe request never allows direct password updates (managed by a separate dedicated endpoint, or by password reset process for security). All change history is reflected in the updated_at timestamp. Security measures prevent users from editing others' profiles unless authorized; self-edits are limited to certain fields.\n\nRelated endpoints: detail (GET), list (PATCH), create (POST), delete (DELETE). Strict validation and business rule application ensure stability and data quality.",
+      "summary": "Update user profile and account fields (core.users table).",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Target user's ID (UUID).",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": {
+        "description": "Editable fields for user update, such as profile details or status/role changes (excludes password updates).",
+        "typeName": "IUser.IUpdate"
+      },
+      "responseBody": {
+        "description": "Full, updated user profile after modifications, including associated role info.",
+        "typeName": "IUser"
+      },
+      "path": "/core/users/{id}",
+      "method": "put"
+    },
+    {
+      "specification": "Delete a user from the board system, via the 'users' Prisma model. In practice, this may perform a hard or soft delete per business rules (typically soft delete for audit/history).",
+      "description": "Deletes a user account with the specified ID. This typically marks the user's status as deleted or suspended and/or sets a deletion flag in audit fields, per the users Prisma schema and moderation rules. Associated content (posts, comments, votes) may be retained for community reference, moderation, or audit logs, as described in requirements.\n\nOnly administrators may perform this action, and a detailed audit trail is kept. Related endpoints are used for restoration or final hard-delete (if policy allows). Errors for not found or forbidden actions are handled appropriately; sensitive information on deleted users is not exposed.",
+      "summary": "Softly or fully delete a user (core.users table).",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Target user's ID (UUID).",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseBody": {
+        "description": "Confirmation of successful deletion or status update, with minimal identifying info.",
+        "typeName": "IUser.IDeleteResponse"
+      },
+      "path": "/core/users/{id}",
+      "method": "delete"
+    },
+    {
+      "specification": "Retrieve a list of available user roles defined in the 'user_roles' table. Used by administrators and for account registration/profile editing. Supports filtering, sorting, and pagination.",
+      "description": "This operation returns a paginated list of user roles available to assign, as defined by the user_roles model. Roles govern permissions across the board (e.g., member, moderator, administrator). Designed for use in registration processes, admin dashboards, or role management panels, enabling filtering by role name or description and ordering of results.\n\nData returned is defined strictly by the Prisma model and schema comments. This operation is auditable and respects business constraints on who may view/assign roles. Related endpoints: single role GET, create (POST), update (PUT), and delete (DELETE).\n\nError cases (e.g., forbidden access) are handled with appropriate status codes. Pagination and search parameters maximize usability and efficiency, especially for large deployments with custom roles.",
+      "summary": "List and filter user roles (core.userRoles table).",
+      "parameters": [],
+      "requestBody": {
+        "description": "Filter, search, and pagination info for user roles listing.",
+        "typeName": "IUserRole.IRequest"
+      },
+      "responseBody": {
+        "description": "A paginated list of available user roles with label and description.",
+        "typeName": "IPageIUserRole"
+      },
+      "path": "/core/userRoles",
+      "method": "patch"
+    },
+    {
+      "specification": "Get details for a single user role from the 'user_roles' table. Primarily for admin role management and during user registration or updates.",
+      "description": "Retrieves all details for a single user role, specified by ID. Used in admin panels to display all properties of a role, or in account registration to inform users about the meaning and permissions of each role (as described in schema comments: name, description, etc).\n\nRespects all business rules regarding role assignment and application. Related endpoints: list (PATCH), creation (POST), update (PUT), delete (DELETE). Errors for missing roles or unauthorized actions are handled gracefully, with clear messaging.",
+      "summary": "Get a single user role's details (core.userRoles table).",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Target role's ID (UUID).",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseBody": {
+        "description": "Details about the specified user role, including label and full description.",
+        "typeName": "IUserRole"
+      },
+      "path": "/core/userRoles/{id}",
+      "method": "get"
+    },
+    {
+      "specification": "Create a new user role in the system, using the 'user_roles' table. For defining permissions such as moderator/admin/member status. Only accessible by administrators.",
+      "description": "Creates a new user role based on the schema structure, with fields for name (label) and description. Enforces the uniqueness of the role name and ensures all required information is provided, following the comments and requirements detailed in the Prisma schema.\n\nIntended for administrator setup or customization of new permission levels. Errors are sent in case of duplicate names, missing fields, or insufficient permissions. Successful creation returns the new user role record, suitable for immediate assignment to users.\n\nRelated endpoints: list (PATCH), single GET, update (PUT), and delete (DELETE) for user roles.",
+      "summary": "Create a new user role (core.userRoles table).",
+      "parameters": [],
+      "requestBody": {
+        "description": "New user role details, including name and description.",
+        "typeName": "IUserRole.ICreate"
+      },
+      "responseBody": {
+        "description": "Details for the created user role, ready for assignment to users.",
+        "typeName": "IUserRole"
+      },
+      "path": "/core/userRoles",
+      "method": "post"
+    },
+    {
+      "specification": "Update all editable fields for an existing user role in the 'user_roles' table. Enables administrators to edit the label (name) and description for a role. Used for adjusting or correcting permission sets.",
+      "description": "Updates an existing user role's properties (name and/or description). Uniqueness of the name is enforced by Prisma schema rules. Typical in systems where additional roles/policies are introduced or for correcting role definitions.\n\nOnly administrators are permitted to update roles. Change history is tracked and any update is reflected in audit fields. Related endpoints: detail GET, list PATCH, creation POST, and deletion DELETE for user roles.\n\nAny errors due to duplicates, forbidden edits, or missing records generate suitable error codes in response. Endpoint matches structure and intentions described in requirements and schema comments.",
+      "summary": "Edit label/description for a user role (core.userRoles table).",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Target role's ID (UUID).",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": {
+        "description": "New values for user role fields (name/description).",
+        "typeName": "IUserRole.IUpdate"
+      },
+      "responseBody": {
+        "description": "Updated role details after successful edit.",
+        "typeName": "IUserRole"
+      },
+      "path": "/core/userRoles/{id}",
+      "method": "put"
+    },
+    {
+      "specification": "Delete a user role from the 'user_roles' table. Used by administrators; typically only possible for custom or unused roles (some roles may be protected by business rule).",
+      "description": "Deletes a user role identified by its ID. Enforces business and schema rules about which roles can be deleted (e.g., prevents deletion of critical roles if protected by business logic). If the role is in use (referenced by users), operation will fail with a clear error message.\n\nAdministrative rights are required. Detailed audit trails are maintained for changes. Related endpoints: create (POST), list (PATCH), update (PUT), detail (GET). All operations match Prisma schema and requirements. Appropriate handling is provided for not found, forbidden, or dependency errors.",
+      "summary": "Delete a user role from the system (core.userRoles table).",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Target role's ID (UUID).",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseBody": {
+        "description": "Confirmation of role deletion or status update; references deleted role.",
+        "typeName": "IUserRole.IDeleteResponse"
+      },
+      "path": "/core/userRoles/{id}",
+      "method": "delete"
+    },
+    {
+      "specification": "This operation retrieves a paginated, searchable, and optionally sorted list of discussion categories from the 'categories' table in the Core schema. It supports filtering by category name, description, creation timestamp, and includes pagination controls (page, pageSize) and ordering options (e.g., by name or date created). The endpoint is essential for displaying lists of categories to users, for administrative overviews, or for category suggestion interfaces. It does not expose creation or update metadata beyond the necessary category fields. Only users with proper permissions may access certain administrative search features. Related endpoints include detail retrieval, creation, update, and deletion of single categories.",
+      "description": "This API operation returns a list of categories, leveraging the 'categories' table from the database. \n\nThe response is paginated and may be filtered based on optional query parameters such as name, partial matches in description, or created_at window. Secure endpoints may restrict certain filters or result fields to administrators. The main purpose is to allow users to browse or search available discussion categories for post assignment or exploration. \n\nSecurity: Some filtering/search options may be restricted to users with elevated roles, such as administrators or moderators. Regular users typically see all active categories only. \n\nThis endpoint is commonly used in category selection modals, administrative dashboards, and on board homepages. Validation ensures page and pageSize are non-negative, and sortBy field must match a valid column. Error handling will return informative failures for invalid filter parameters or database errors.\n\nThis operation is related to single-category get, create, update, and delete operations, and in large systems may be supplemented by category suggestion/approval flows.",
+      "summary": "List and search categories (Core.categories)",
+      "parameters": [],
+      "requestBody": {
+        "description": "Search criteria, pagination, and sorting parameters for categories list query.",
+        "typeName": "ICategory.IRequest"
+      },
+      "responseBody": {
+        "description": "Paginated result including array of category summaries and pagination metadata.",
+        "typeName": "IPageICategory"
+      },
+      "path": "/core/categories",
+      "method": "patch"
+    },
+    {
+      "specification": "This operation retrieves a single category, identified by its unique UUID, from the 'categories' table in the Core schema. It is used for viewing detailed information about a category, typically for display on category profile pages or administrative management screens. The operation ensures the referenced category exists and returns its complete details.",
+      "description": "Retrieves category information for the specified ID from the 'categories' table, including name, description, creation timestamp, and potentially related post count or status if extended.\n\nIf the category does not exist, the API returns a clear error message. Access policies determine visibility of archived or deactivated categories—regular users can only view active categories, while admins may retrieve all states.\n\nThis endpoint is essential for screens displaying category details prior to editing/deleting, or for referencing during post creation/editing workflows. Includes validation of the UUID path parameter. Returns 404 if not found or permission denied.\n\nRelated endpoints: categories list/search (PATCH), create (POST), update (PUT), and delete (DELETE).",
+      "summary": "Retrieve specific category by ID (Core.categories)",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Unique ID of the target category",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseBody": {
+        "description": "Full detail of the specified category, including all public fields.",
+        "typeName": "ICategory"
+      },
+      "path": "/core/categories/{id}",
+      "method": "get"
+    },
+    {
+      "specification": "This operation creates a new discussion category in the 'categories' table of the Core schema. Typically restricted to administrative users, this endpoint supports the addition of new categories for organizing posts. All submitted data is validated for uniqueness and format compliance before insertion.",
+      "description": "Allows creation of a new category topic for the discussion board, by inserting a new record into the 'categories' table in the database. The provided name must be unique among all categories. Description field gives users context. Only authorized users (administrators) are permitted to execute this operation.\n\nInput validation includes ensuring that required fields are present, name does not duplicate existing entries, and description respects length/content rules. On success, the new category is created and returned with full detail including its assigned UUID and creation timestamp.\n\nError handling covers invalid parameters, uniqueness violations, or insufficient permissions. \n\nRelated endpoints: list/search (PATCH), get (GET), update (PUT), and delete (DELETE) for categories.",
+      "summary": "Create new category (Core.categories)",
+      "parameters": [],
+      "requestBody": {
+        "description": "Data for new category including unique name and description.",
+        "typeName": "ICategory.ICreate"
+      },
+      "responseBody": {
+        "description": "The newly created category with full details.",
+        "typeName": "ICategory"
+      },
+      "path": "/core/categories",
+      "method": "post"
+    },
+    {
+      "specification": "This operation updates the details of a specific category (by UUID) in the 'categories' table in the Core schema. Usually accessible to administrators, it allows updating name or description fields, with necessary validation to ensure continued uniqueness of name and data consistency.",
+      "description": "Updates an existing category's name or description by changing the relevant fields in the 'categories' table. The category is referenced by its unique UUID path parameter, and the body provides updated data.\n\nThis operation may only be performed by users with appropriate administrative roles. Validation checks include verifying that the new category name does not duplicate any other categories and that all required fields meet formatting rules.\n\nPartial or full updates are supported; fields not included may retain their current values. Business rules may restrict changes if the category is currently associated with posts. On success, the full updated category information is returned.\n\nError handling includes failing if the category does not exist, trying to use a duplicate name, or lacking sufficient rights. Related operations: get, create, delete, and list/search categories.",
+      "summary": "Update a category by ID (Core.categories)",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Unique ID of the target category",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": {
+        "description": "Updated name and/or description for the category.",
+        "typeName": "ICategory.IUpdate"
+      },
+      "responseBody": {
+        "description": "The updated category details after saving changes.",
+        "typeName": "ICategory"
+      },
+      "path": "/core/categories/{id}",
+      "method": "put"
+    },
+    {
+      "specification": "This operation deletes (or marks as deleted) a specific category in the 'categories' table of the Core schema, referenced by its UUID. Typically for use by administrators. Deletion may be soft (recommended), preserving history for audit and reference, or hard, depending on system policy and category usage.",
+      "description": "Deletes (or marks as deleted) a category based on its unique ID. This operation usually employs soft-deletion: the category is flagged so it no longer appears in lists or selection menus, but remains in the database for historical tracking and audit purposes. Some implementations may require hard deletion if the category has no posts attached.\n\nPermission to use this operation is typically restricted to administrators. Attempts to delete active categories in use by posts may be rejected or require confirmation. All deletion attempts are logged for audit.\n\nError cases include non-existent category ID, attempts to delete categories linked to live posts, or insufficient permissions. Related endpoints: create, get, update, and list/search categories.",
+      "summary": "Delete a category by ID (Core.categories)",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Unique ID of the target category",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseBody": {
+        "description": "Result of the delete operation, such as a confirmation message or status object.",
+        "typeName": "ICategory.IDeleteResult"
+      },
+      "path": "/core/categories/{id}",
+      "method": "delete"
+    },
+    {
+      "specification": "This operation retrieves a paginated, searchable, and optionally sorted list of posts from the 'posts' table in the Posts schema. It supports filtering by category, author, date, title/content keywords, and includes pagination and ordering controls. This endpoint is core to board browsing, search results, and feeds. Security, filtering and personalization may vary by user role.",
+      "description": "This API operation returns a list of posts (discussion threads or articles) with full support for filtering by category, author, or keywords, as well as sorting and pagination. Non-admin users typically see only non-deleted, non-archived posts, while administrators may have visibility into all post states. Standard search validation is performed for page, pageSize, and sort field inputs.\n\nThe endpoint supports community browsing, category threads, author-centric feeds, and search result pages. It also includes support for keyword-based full-text search on titles and content. Additional metadata such as comment and vote counts may be included per business requirements. Error handling addresses invalid filters, missing results, or backend errors.\n\nRelated to post retrieval (GET), post creation (POST), update (PUT), and delete (DELETE) endpoints, as well as comment and vote-related APIs.",
+      "summary": "List and search posts (Posts.posts)",
+      "parameters": [],
+      "requestBody": {
+        "description": "Criteria for searching, paging, and sorting posts.",
+        "typeName": "IPost.IRequest"
+      },
+      "responseBody": {
+        "description": "Paginated result of posts with summary data, and metadata for pagination.",
+        "typeName": "IPageIPost"
+      },
+      "path": "/posts/posts",
+      "method": "patch"
+    },
+    {
+      "specification": "This operation retrieves a single post, identified by its unique UUID, from the 'posts' table in the Posts schema. The response includes all public fields, including author and category details, and is suitable for post detail pages, preview panels, or administrative tools. Ensures correct permissions and existence before providing detail.",
+      "description": "Retrieves full details of a single post, identified by its unique ID. Returns all fields visible to the viewing user, such as title, content, author reference, category reference, creation and update times, etc. Admin users may access deleted posts if required, while normal users only see active posts.\n\nThis API is the primary source of detail for displaying or editing a discussion post. It validates the UUID input, and returns a 404 or permission error if the post does not exist or the user lacks rights.\n\nRelated endpoints: post list/search (PATCH), create (POST), update (PUT), delete (DELETE). Also supports comment and voting APIs.",
+      "summary": "Retrieve specific post by ID (Posts.posts)",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Unique ID of the target post",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseBody": {
+        "description": "All detail fields of the requested post, as permitted by current user role.",
+        "typeName": "IPost"
+      },
+      "path": "/posts/posts/{id}",
+      "method": "get"
+    },
+    {
+      "specification": "This operation creates a new post (discussion thread or article) in the 'posts' table in the Posts schema. Only authenticated users can create posts, which must be linked to a category and have a non-empty title and content. This is the core content-creation endpoint for the discussion board.",
+      "description": "Allows a user to create a new post by providing required information such as category, title, and content. The new post is assigned to the authoring user and is inserted into the database. Creation may be subject to moderation or review depending on platform policies.\n\nInput validation includes ensuring a valid category reference, unique/valid title, and legitimate content (length, formatting). On success, the API returns the full details of the created post, including assigned UUID, timestamps, and author/category references.\n\nError cases include missing/invalid data, attempts to create a post in non-existent category, or by unauthorized/blocked users. Related endpoints: list/search (PATCH), get (GET), update (PUT), delete (DELETE); plus comment APIs.",
+      "summary": "Create a new post (Posts.posts)",
+      "parameters": [],
+      "requestBody": {
+        "description": "All information required for new post: categoryId, title, content.",
+        "typeName": "IPost.ICreate"
+      },
+      "responseBody": {
+        "description": "Full detail for the newly created post, including IDs and timestamps.",
+        "typeName": "IPost"
+      },
+      "path": "/posts/posts",
+      "method": "post"
+    },
+    {
+      "specification": "This operation updates the details of a specific post (by UUID) in the 'posts' table of the Posts schema. Permitted to the original author or admin, supports updating title, content, or possibly category. Validates updates for uniqueness and policy compliance.",
+      "description": "Updates an existing post, referenced by its unique ID. Input may update title, content, and/or category reference. Only the author or an administrator/moderator may perform this operation. All updates are validated for required structure, content, and permission.\n\nPartial updates retain other fields unchanged. History tracking is enabled via timestamps. Changing category may have restrictions if the post has live comments. On success, returns updated post data; on failure, returns validation or permission errors.\n\nRelated endpoints: get, list/search, create, delete for posts. This endpoint supports editing discussion threads after posting.\n",
+      "summary": "Update a post by ID (Posts.posts)",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Unique ID of the target post",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": {
+        "description": "Fields to update for post (title, content, category).",
+        "typeName": "IPost.IUpdate"
+      },
+      "responseBody": {
+        "description": "The updated post's full details after saving changes.",
+        "typeName": "IPost"
+      },
+      "path": "/posts/posts/{id}",
+      "method": "put"
+    },
+    {
+      "specification": "This operation deletes (or marks as deleted) a specific post in the 'posts' table of the Posts schema, referenced by its unique UUID. Used by the original author or admin. Implements soft-delete to comply with audit and policy requirements and preserve discussion history.",
+      "description": "Deletes (or marks as deleted) a post record by its ID. Standard implementation is soft-deletion: post remains in database for moderation and audit but is removed from normal views and feeds. Only the original author, admin, or moderator can perform deletion. Attempts to delete posts with active comments or votes may be subject to business rule restrictions or warnings.\n\nAll delete actions are logged. The response provides confirmation or error. Related endpoints: create, get, update, and list/search for posts. Deletion cascades may apply to comments and votes as policy dictates.\n",
+      "summary": "Delete a post by ID (Posts.posts)",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Unique ID of the target post",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseBody": {
+        "description": "Result or confirmation of post deletion (success, message, etc.)",
+        "typeName": "IPost.IDeleteResult"
+      },
+      "path": "/posts/posts/{id}",
+      "method": "delete"
+    },
+    {
+      "specification": "Implements a list operation (search/pagination/filtering) for comments in the discussion board. This is based on the 'comments' table in the Posts domain (see Prisma schema 'comments'). Supports listing comments, optionally filtered by post, author, date range, or parent comment. Allows for pagination (offset/limit), keyword search, and sorting by creation date. Returns a paged list of comments with their relevant details and metadata.",
+      "description": "This API retrieves a paged list of comments from the discussion board. Typically, users or moderators use it to see all comments on a specific thread, all comments by a particular user, or to moderate recent activity.\n\nThe route supports filtering (e.g., by postId, userId, parentId), pagination (offset/limit), full-text search on comment content, and sorting (e.g., newest first). Security considerations include only exposing non-deleted comments by default, unless requested by a privileged moderator/admin. Comment content is filtered to remove inappropriate language if the requester has insufficient privileges.\n\nIt references the 'comments' table (Posts domain). Query performance is optimized via relevant indexes. Related APIs include: create (POST /posts/comments), update (PUT /posts/comments/{id}), retrieve detail (GET /posts/comments/{id}), and delete (DELETE /posts/comments/{id}).\n\nInput validation includes correct types for filters, max page size, and valid sort orders. Error handling covers unauthorized access, malformed filters, and nonexistent references.",
+      "summary": "Retrieve a filtered, paginated list of comments (Posts domain, 'comments' table).",
+      "parameters": [],
+      "requestBody": {
+        "description": "Defines filtering, pagination, and sorting criteria for retrieving comments. Fields may include postId, userId, parentId, search, offset, limit, and sort.",
+        "typeName": "IComment.IRequest"
+      },
+      "responseBody": {
+        "description": "Paged list of comments matching given filters.",
+        "typeName": "IPageIComment"
+      },
+      "path": "/posts/comments",
+      "method": "patch"
+    },
+    {
+      "specification": "Implements a retrieve operation for a single comment from the discussion board (get detail by id). This is based on 'comments' table (Posts domain). Used to get all properties and associations of a particular comment.",
+      "description": "This API fetches the detail of a single comment in the discussion board by its unique ID. Common scenarios include users viewing a nested reply, moderators inspecting a reported comment, or when displaying a comment in thread view.\n\nIt returns full details such as content, author, timestamps, post reference, parent comment reference, and vote tallies. The route references the 'comments' table (Posts domain) and is optimized for quick retrieval. It will not return comments marked as deleted unless accessed by a user with sufficient privileges (e.g., moderator or admin).\n\nError handling includes returning appropriate errors for nonexistent, deleted, or unauthorized access. Related APIs: listing (PATCH /posts/comments), update (PUT /posts/comments/{id}), creation (POST /posts/comments), and deletion (DELETE /posts/comments/{id}).",
+      "summary": "Fetch detailed information about a single comment (Posts domain, 'comments' table).",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Target comment's ID",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseBody": {
+        "description": "Full comment info, including content, author, timestamps, post and parent references.",
+        "typeName": "IComment"
+      },
+      "path": "/posts/comments/{id}",
+      "method": "get"
+    },
+    {
+      "specification": "Implements the creation of a new comment in the discussion board (threaded reply system). This is based on the 'comments' table in Posts domain. A registered user can post a top-level or nested comment, referencing a post and optional parent comment.",
+      "description": "This API lets a registered user create a new comment (either as a direct reply to a post or as a nested reply to another comment). Necessary fields include the content, target postId, and optionally a parentId (for replies-to-replies).\n\nInput is validated for minimum/maximum length, appropriate content, and ensuring the parent exists and belongs to the same post. The endpoint checks author authentication and standard anti-abuse policies (e.g., rate limiting). On success, it returns the created comment record with all metadata (author, timestamp, etc.).\n\nBusiness logic from the 'comments' table (Posts domain) is implemented: only registered users may comment; soft deletion rules apply. Related endpoints: retrieval (GET /posts/comments/{id}), update (PUT /posts/comments/{id}), and listing (PATCH /posts/comments).",
+      "summary": "Create a new comment (Posts domain, 'comments' table).",
+      "parameters": [],
+      "requestBody": {
+        "description": "New comment data, including content, postId, and optional parentId.",
+        "typeName": "IComment.ICreate"
+      },
+      "responseBody": {
+        "description": "The newly created comment record, with full metadata.",
+        "typeName": "IComment"
+      },
+      "path": "/posts/comments",
+      "method": "post"
+    },
+    {
+      "specification": "Implements update (edit) of an existing comment in the discussion board (Posts domain, 'comments' table). Allows the original author (or moderator/admin) to modify content or mark as deleted. Can only be performed on non-deleted comments (unless by a moderator).",
+      "description": "This API allows an authorized user (typically the comment's original author or a moderator/admin) to update the content or status of a comment. Supported fields for update include content (for editing), and soft deletion flag.\n\nChecks include author authentication, edit time-window (if enforced by policy), and protection against editing after moderation/deletion. Input validation ensures updated content meets platform standards, and references are unaltered (cannot change post or parentId).\n\nThe endpoint references the 'comments' table (Posts domain). On success, returns the updated comment object. Error scenarios include not found, unauthorized modification, or invalid updates. Related APIs: create (POST /posts/comments), retrieve (GET /posts/comments/{id}), delete (DELETE /posts/comments/{id}).",
+      "summary": "Update an existing comment's content or deletion status (Posts domain, 'comments' table).",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "The target comment's ID to update",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": {
+        "description": "Fields to update in the comment (content and/or soft delete).",
+        "typeName": "IComment.IUpdate"
+      },
+      "responseBody": {
+        "description": "The updated comment record.",
+        "typeName": "IComment"
+      },
+      "path": "/posts/comments/{id}",
+      "method": "put"
+    },
+    {
+      "specification": "Implements delete (soft deletion) of a comment in the discussion board (Posts domain, 'comments' table). Normally used by the original author or moderator. The record is flagged as deleted, not physically removed.",
+      "description": "This API performs a soft deletion (marks as deleted) of a comment identified by its ID. Typical scenarios: the comment's author chooses to remove their reply, or a moderator removes content that violates policy. The comment remains in the database (for auditability), but becomes invisible to regular users and excluded from normal listings.\n\nAuthorization checks enforce only the author, moderator, or admin can perform this. Related error handling includes not found, already deleted, and unauthorized access. Audit logs are typically recorded. Related endpoints: create (POST /posts/comments), update (PUT /posts/comments/{id}), retrieve (GET /posts/comments/{id}), list (PATCH /posts/comments).",
+      "summary": "Soft-delete a comment (Posts domain, 'comments' table).",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "The comment's ID to delete",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseBody": {
+        "description": "Indicates successful deletion or details if already deleted.",
+        "typeName": "IComment.IDeleteResult"
+      },
+      "path": "/posts/comments/{id}",
+      "method": "delete"
+    },
+    {
+      "specification": "Implements list/search with filtering, sorting, and pagination for votes in the discussion board. Based on 'votes' table (Votes domain). Used by admins/moderators to audit voting patterns, or by users to see their own history. Can filter by user, target post, or comment.",
+      "description": "This API returns a list of vote records, most commonly used for reviewing moderation history, analytics, or a user's own votes. Supports filtering by userId, postId, or commentId; pagination (offset/limit); sort order (most recent, oldest first). Optionally, can search for patterns if metadata fields exist.\n\nReferences the 'votes' table (Votes domain) and makes use of unique constraints (one vote per user per item) in its filtering logic. Security notes: regular users can only see their own votes, admins/moderators may audit all. Related endpoints: create (POST /votes/votes), update (PUT /votes/votes/{id}), detail (GET /votes/votes/{id}), delete (DELETE /votes/votes/{id}).",
+      "summary": "Retrieve a filtered, paginated list of votes (Votes domain, 'votes' table).",
+      "parameters": [],
+      "requestBody": {
+        "description": "Filtering, pagination, and sorting for votes list. Fields: userId, postId, commentId, offset, limit, sort.",
+        "typeName": "IVote.IRequest"
+      },
+      "responseBody": {
+        "description": "Paged list of vote records matching given filters.",
+        "typeName": "IPageIVote"
+      },
+      "path": "/votes/votes",
+      "method": "patch"
+    },
+    {
+      "specification": "Implements detail-retrieval of a single vote record by its ID (Votes domain, 'votes' table). Used by admins, or for users viewing their own voting history.",
+      "description": "Fetches detail for a specific vote, identified by its unique ID. Useful for moderation review or self-audit by a voting user. Information includes which user voted, the value (+1/-1), what post/comment was targeted, and timestamps.\n\nReferences the 'votes' table (Votes domain). Only visible to the vote's owner or those with sufficient privilege. Error handling covers not found, unauthorized access, and malformed IDs. Related endpoints: create (POST /votes/votes), update (PUT /votes/votes/{id}), details (PATCH /votes/votes), delete (DELETE /votes/votes/{id}).",
+      "summary": "Retrieve full details for a single vote (Votes domain, 'votes' table).",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Vote record's ID",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseBody": {
+        "description": "Full vote record, including user, content, and metadata.",
+        "typeName": "IVote"
+      },
+      "path": "/votes/votes/{id}",
+      "method": "get"
+    },
+    {
+      "specification": "Implements creation of a new vote record in the Votes domain ('votes' table). Used when a user upvotes or downvotes a post or comment. Only registered users may vote; validation ensures only one vote per user per content item, with appropriate mutual exclusivity on postId/commentId.",
+      "description": "Lets a user cast a vote—either upvote or downvote—on a post or comment. Input: must include user ID, value (+1/-1), and reference to either a post or a comment (but not both). Performs validation to ensure target exists and user has not already voted. On success, returns created vote record.\n\nVote limit: only one vote per user per content item, enforced via unique constraint. Can be used for voting analytics, user history, and tally calculations. Related endpoints: retrieve (GET /votes/votes/{id}), update (PUT /votes/votes/{id}), delete (DELETE /votes/votes/{id}), list (PATCH /votes/votes).",
+      "summary": "Create a new vote (Votes domain, 'votes' table).",
+      "parameters": [],
+      "requestBody": {
+        "description": "Cast a vote on a post or comment: must include value (+1 or -1) and target (postId or commentId).",
+        "typeName": "IVote.ICreate"
+      },
+      "responseBody": {
+        "description": "The newly created vote record.",
+        "typeName": "IVote"
+      },
+      "path": "/votes/votes",
+      "method": "post"
+    },
+    {
+      "specification": "Implements vote modification (edit) in the Votes domain ('votes' table). Allows a user to change their vote value from +1 to -1 or vice versa. Only the owner or admin can perform edits; reference fields (postId/commentId) are locked after creation. Record must exist and not be deleted.",
+      "description": "Lets a user (or moderator/admin) edit an existing vote—typically to change their upvote to downvote or vice versa, or to correct an input error. Only the vote's owner or privileged users may edit. Only value can change; postId or commentId are immutable.\n\nBusiness logic is enforced as per the 'votes' table (Votes domain): only one vote per user/content, mutual exclusivity between postId/commentId, and all references must remain valid. Returns the updated vote on success. Related endpoints: create (POST /votes/votes), retrieve (GET /votes/votes/{id}), list (PATCH /votes/votes), delete (DELETE /votes/votes/{id}).",
+      "summary": "Edit an existing vote's value (Votes domain, 'votes' table).",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Vote record's ID to update",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": {
+        "description": "Fields to update in the vote (only value may be changed).",
+        "typeName": "IVote.IUpdate"
+      },
+      "responseBody": {
+        "description": "The updated vote record.",
+        "typeName": "IVote"
+      },
+      "path": "/votes/votes/{id}",
+      "method": "put"
+    },
+    {
+      "specification": "Implements deletion (removal) of a vote in the Votes domain ('votes' table). Used when a user or moderator wants to retract a vote or clean up invalid input. Removes the record entirely, adjusting content tallies as needed.",
+      "description": "This endpoint removes a specific vote by its ID. Common use-cases: a user withdraws their vote or a moderator/admin removes a vote for violating policy. The vote is deleted from the database (hard delete), and any relevant tally is decremented.\n\nAuthorization checks ensure only the vote's owner or privileged roles may perform deletion. Related endpoints: create (POST /votes/votes), update (PUT /votes/votes/{id}), retrieve (GET /votes/votes/{id}), list (PATCH /votes/votes). Audit logging may be triggered for moderation actions.",
+      "summary": "Delete a vote record from the database (Votes domain, 'votes' table).",
+      "parameters": [
+        {
+          "name": "id",
+          "description": "Vote record's ID to delete",
+          "schema": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      ],
+      "requestBody": null,
+      "responseBody": {
+        "description": "Indicates success or provides result details of the delete action.",
+        "typeName": "IVote.IDeleteResult"
+      },
+      "path": "/votes/votes/{id}",
+      "method": "delete"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "IPost.ISummary": {
+        "type": "object",
+        "description": "게시글(포스트)의 요약 정보를 제공하는 타입입니다. 목록 조회, 관계 프로퍼티 등에서 사용됩니다.\n\n게시글의 고유 ID, 제목, 작성자 ID, 카테고리 ID, 생성일, 수정일, 댓글/추천 등 카운트 필수 정보를 담고 있어, 리스트 UI 테이블/카드 등 요약 리스트용으로 활용합니다. 본문 전체나 관계 정보는 포함하지 않습니다.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "게시글 고유 식별자(UUID). 예: '973c0116-ac2c-4ffb-b38b-7c4c45c7b2df'"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "작성자(user)의 ID(UUID)"
+          },
+          "category_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "속한 카테고리의 ID(UUID)"
+          },
+          "title": {
+            "type": "string",
+            "description": "게시글 제목"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "게시글 작성일시(ISO8601)"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "게시글 마지막 수정 시각(ISO8601)"
+          },
+          "comment_count": {
+            "type": "integer",
+            "description": "해당 글의 댓글 개수"
+          },
+          "vote_count": {
+            "type": "integer",
+            "description": "해당 글의 추천(투표) 합계"
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "category_id",
+          "title",
+          "created_at",
+          "updated_at",
+          "comment_count",
+          "vote_count"
+        ]
+      },
+      "IUser.IRequest": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "format": "uint32",
+            "description": "Page number for user list pagination. Optional field, aligns with standard best practices for paginated APIs.\n\nUsed to retrieve a specific page of user data. Default follows the IPage IRequest definition."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "uint32",
+            "description": "Number of users per page (for pagination). Optional, defaults to 100 if unspecified as per IPage specification.\n\nRestricts how many user records are returned in each page."
+          },
+          "role": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Filter by user role (user_roles.id) to return users with a specific role (e.g., member, moderator, administrator).\n\nHelps admins/moderators filter and locate users of a particular type or permission set."
+          },
+          "status": {
+            "type": "string",
+            "description": "Filter users by account status (e.g., 'active', 'suspended', 'banned').\n\nEnables moderation and administrative user management by quickly finding users in specific states."
+          },
+          "search": {
+            "type": "string",
+            "description": "Search string, matches username or email in user list queries.\n\nSupports quick filtering of users when searching by identifying fields; case-insensitive partial match."
+          }
+        },
+        "description": "User list request/filter parameters, supporting pagination, search, and filtering by role or status.\n\nImplements board requirements around user management and moderation. Based on database and business rules from Core.users and relevant API operation specs.",
+        "required": []
+      },
+      "IUser.ISummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User's unique identifier (UUID).\n\nReferenced from users.id in the database, required for user profile lookups."
+          },
+          "username": {
+            "type": "string",
+            "description": "Public username (displayed in the board and visible to all users).\n\nUnique and required; serves as the user's main identifier for discussions, voting, and moderation."
+          },
+          "bio": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Optional user biography; a short self-description or interests section.\n\nMay be empty; helps other members know basic info about the user."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional user biography; a short self-description or interests section.\n\nMay be empty; helps other members know basic info about the user."
+          },
+          "role": {
+            "$ref": "#/components/schemas/IUserRole.ISummary"
+          },
+          "status": {
+            "type": "string",
+            "description": "Current user account status (e.g., 'active', 'suspended', 'banned').\n\nReflects moderation, login eligibility, and enforcement of platform rules."
+          }
+        },
+        "description": "Concise user summary as returned in user listing responses. Hides sensitive fields.\n\nIncludes only public profile, role summary, and status info. Used in paginated user lists and admin/member lookup features.",
+        "required": [
+          "id",
+          "username",
+          "role",
+          "status"
+        ]
+      },
+      "IUserRole.ISummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for user role (user_roles.id field).\n\nEnforces referential integrity for permission assignments."
+          },
+          "name": {
+            "type": "string",
+            "description": "Short label name for the user role (e.g., 'member', 'moderator', 'administrator').\n\nUsed in dropdowns, labels, admin tools. Required and unique per database schema."
+          }
+        },
+        "description": "Summary/view version of a user role entity. Contains only essential fields (id, name).\n\nUsed for responses where full details are unnecessary but reference is required.",
+        "required": [
+          "id",
+          "name"
+        ]
+      },
+      "IPageIUser.ISummary": {
+        "type": "object",
+        "properties": {
+          "pagination": {
+            "$ref": "#/components/schemas/IPage.IPagination"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IUser.ISummary"
+            },
+            "description": "Paginated list of user summaries matching request filters."
+          }
+        },
+        "description": "Paginated user summary list container.\n\nStandardized IPage<T> wrapper for user listings, as per business requirements.",
+        "required": [
+          "pagination",
+          "data"
+        ]
+      },
+      "IUser": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique internal user ID (users.id). Used system-wide to link all user objects, references, and foreign keys.\n\nRequired; generated upon account creation and immutable."
+          },
+          "user_role_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Foreign key to user_roles.id; denotes the active permission set (member, moderator, admin, etc).\n\nRequired at creation; determines access, moderation, and board capabilities."
+          },
+          "username": {
+            "type": "string",
+            "description": "Unique public display name; visible to all, and referenced in discussion, voting, and moderation.\n\nDatabase-enforced as unique."
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "User's email address. Used for login and communication.\n\nNever displayed publicly. Must be unique."
+          },
+          "bio": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Free-form user biography/self-description.\n\nOptional, enhances social context on the board."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Free-form user biography/self-description.\n\nOptional, enhances social context on the board."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Account creation datetime (with timezone). Used for auditing, ordering, and admin reporting.\n\nImmutable."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Most recent profile update timestamp for this user.\n\nUpdated whenever profile fields are changed."
+          },
+          "status": {
+            "type": "string",
+            "description": "Current account status (active, suspended, banned, etc.).\n\nEnforced per moderation/business rule policies."
+          },
+          "role": {
+            "$ref": "#/components/schemas/IUserRole"
+          },
+          "posts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IPost.ISummary"
+            },
+            "description": "Array of summaries for posts authored by the user (board threads or articles)."
+          },
+          "comments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IComment.ISummary"
+            },
+            "description": "List of summaries for comments made by this user."
+          },
+          "votes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IVote.ISummary"
+            },
+            "description": "Summary array of votes cast by the user on posts/comments."
+          }
+        },
+        "required": [
+          "id",
+          "user_role_id",
+          "username",
+          "email",
+          "created_at",
+          "updated_at",
+          "status",
+          "role"
+        ],
+        "description": "Full user entity, as per users Prisma schema. Contains all non-confidential account info and relations.\n\nDetailed per-table and per-field documentation referenced from schema. Represents user profiles for detail pages and admin/mod tools."
+      },
+      "IUser.ICreate": {
+        "type": "object",
+        "properties": {
+          "user_role_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Role assignment for new user; must match user_roles.id. Required at registration. E.g., 'member', 'moderator', or 'administrator'."
+          },
+          "username": {
+            "type": "string",
+            "description": "New user's unique public display name. Required, must be unique, visible on the board."
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "New user's email address. Required for registration, must be unique, never public."
+          },
+          "bio": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "Optional user bio/about section. May be empty upon registration."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional user bio/about section. May be empty upon registration."
+          },
+          "password": {
+            "type": "string",
+            "description": "User password, plain text at registration. Required; will be securely hashed before storage. Never returned by API."
+          },
+          "status": {
+            "type": "string",
+            "description": "Initial status for user: normally 'active', but admin can specify e.g., 'pending', 'suspended'."
+          }
+        },
+        "required": [
+          "user_role_id",
+          "username",
+          "email",
+          "password",
+          "status"
+        ],
+        "description": "Request body schema for new user registration/account creation.\n\nAll required/optional fields per users model. Password is accepted as clear text but is hashed internally."
+      },
+      "IUser.IUpdate": {
+        "type": "object",
+        "properties": {
+          "user_role_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "(Optional) Role update for user. Admin/moderator action only. Must match an existing user_roles.id."
+          },
+          "username": {
+            "type": "string",
+            "description": "(Optional) Update to user's public display name. Must be unique if updated."
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "description": "(Optional) Update to user's email address. Uniqueness required if changed."
+          },
+          "bio": {
+            "oneOf": [
+              {
+                "type": "string",
+                "description": "(Optional) Update to bio/about me field."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "(Optional) Update to bio/about me field."
+          },
+          "status": {
+            "type": "string",
+            "description": "(Optional) Modify user account status (active, suspended, etc.)."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Update timestamp; automatically set by the server on update."
+          }
+        },
+        "required": [],
+        "description": "Request body for updating an existing user profile/account.\n\nOnly fields supplied are updated; all are optional. Password change is NOT handled here."
+      },
+      "IUser.IDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of user deleted or marked for deletion. Used for reference in audit trails and deletion confirmations."
+          },
+          "status": {
+            "type": "string",
+            "description": "Status message (e.g., 'deleted', 'suspended', etc.) after deletion/disable action."
+          }
+        },
+        "description": "Response for user deletion operation. Contains minimal identifying and audit info.\n\nDoes not reveal sensitive user fields.",
+        "required": []
+      },
+      "IUserRole.IRequest": {
+        "type": "object",
+        "properties": {
+          "page": {
+            "type": "integer",
+            "format": "uint32",
+            "description": "Page number for role list pagination. Optional; aligns with IPage best-practice."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "uint32",
+            "description": "Pagination limit for number of roles per page. Defaults to 100 if missing.\n\nStandard for IPage APIs."
+          },
+          "search": {
+            "type": "string",
+            "description": "Keyword filter for role name or description fields. Enables quick role lookup."
+          }
+        },
+        "description": "List/request filtering schema for user roles table.\n\nSupports pagination, keyword search for role management dashboards, registration, and editor widgets.",
+        "required": []
+      },
+      "IPageIUserRole": {
+        "type": "object",
+        "properties": {
+          "pagination": {
+            "$ref": "#/components/schemas/IPage.IPagination"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IUserRole"
+            },
+            "description": "Array of role entities for administrative/user assignment purposes."
+          }
+        },
+        "description": "Paginated wrapper of user roles, for admin lookup and registration dropdowns.\n\nImplements standard IPage format with list of IUserRole.",
+        "required": [
+          "pagination",
+          "data"
+        ]
+      },
+      "IUserRole": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique ID for this user role entry.\n\nPrimary key in user_roles. Required for all entity referencing (assignment, lookup, etc.)."
+          },
+          "name": {
+            "type": "string",
+            "description": "Machine- and human-readable name for the user role, e.g., 'member', 'moderator', or 'administrator'.\n\nMust be unique, and required for referential integrity."
+          },
+          "description": {
+            "type": "string",
+            "description": "Human explanation of what privileges and duties this role holds.\n\nAids in assigning and documenting permissions for users. Required for compliance with admin/business rule traceability."
+          },
+          "users": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IUser.ISummary"
+            },
+            "description": "(For reference/audit) Array of users holding this role. May be omitted if not required at runtime."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description"
+        ],
+        "description": "Full user role entity, as per user_roles Prisma model. Details all privilege/permission details, assignment context, and required unique properties."
+      },
+      "IUserRole.ICreate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Unique name for new role; will become user_roles.name. E.g., 'moderator', 'editor', or custom label."
+          },
+          "description": {
+            "type": "string",
+            "description": "Text description covering what the role enables/limits for users assigned to it."
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "description": "Request schema for creating new user roles.\n\nAllows admin tools to set up new permissions/policies in the board, with full business rule auditing."
+      },
+      "IUserRole.IUpdate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "(Optional) New/updated role name. Must remain unique if updated."
+          },
+          "description": {
+            "type": "string",
+            "description": "(Optional) Update/extend role meaning or allowed actions."
+          }
+        },
+        "required": [],
+        "description": "Request schema for editing an existing user role entry.\n\nAll fields optional; only modified fields must be sent."
+      },
+      "IUserRole.IDeleteResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of user role entry deleted or marked deleted. For audit and post-delete reference."
+          },
+          "status": {
+            "type": "string",
+            "description": "Delete or audit status: e.g., 'deleted', 'archived', 'in use - not deleted'."
+          }
+        },
+        "description": "Response schema for confirming user role deletion (admin-only).\n\nIncludes minimal info required for audit logs and error/success reporting.",
+        "required": []
+      },
+      "IPage.IPagination": {
+        "type": "object",
+        "properties": {
+          "current": {
+            "type": "integer",
+            "format": "uint32",
+            "description": "Current page number."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "uint32",
+            "description": "Limitation of records per a page. Default: 100."
+          },
+          "records": {
+            "type": "integer",
+            "format": "uint32",
+            "description": "Total records in the database."
+          },
+          "pages": {
+            "type": "integer",
+            "format": "uint32",
+            "description": "Total number of pages (records/limit, ceiled)."
+          }
+        },
+        "required": [
+          "current",
+          "limit",
+          "records",
+          "pages"
+        ],
+        "description": "Pagination metadata for paged responses, including current/limit/total/pageCount as per business requirements and search usability."
+      },
+      "ICategory.IRequest": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "필터링 또는 검색을 위한 카테고리 이름입니다.\n\n예: '정치', '경제'"
+          },
+          "description": {
+            "type": "string",
+            "description": "카테고리 설명의 검색을 위한 옵션 필드입니다.\n\n예: '정치 체계와 관련된 논의', '국제 경제 토론'"
+          },
+          "created_from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "검색 시작일자(ISO8601 형식). 예: '2024-06-09T00:00:00+09:00'."
+          },
+          "created_to": {
+            "type": "string",
+            "format": "date-time",
+            "description": "검색 종료일자(ISO8601 형식). 예: '2024-07-09T23:59:59+09:00'."
+          },
+          "page": {
+            "type": "integer",
+            "description": "페이지 번호(1부터 시작).",
+            "minimum": 1
+          },
+          "limit": {
+            "type": "integer",
+            "description": "페이지당 반환할 레코드 수(기본값 100).",
+            "minimum": 1
+          }
+        },
+        "description": "카테고리 리스트/검색 요청에 이용되는 필터, 검색, 페이징 정보 객체입니다.\n\n카테고리 명, 설명, 기간 필터, 페이징 조작(페이지, limit) 등 검색 옵션을 다루며, 관리자 또는 일반 사용자의 카테고리 목록 검색 시 활용됩니다.",
+        "required": [
+          "page",
+          "limit"
+        ]
+      },
+      "IPageICategory": {
+        "type": "object",
+        "properties": {
+          "pagination": {
+            "$ref": "#/components/schemas/IPage.IPagination",
+            "description": "페이지네이션 정보로, 현재 페이지, 전체 레코드 수, 전체 페이지 수 등을 제공합니다."
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ICategory"
+            },
+            "description": "카테고리 목록 데이터 배열입니다."
+          }
+        },
+        "description": "카테고리 검색/조회 결과를 담는 페이지 컨테이너 타입입니다.\n\n페이지네이션 메타데이터와 함께 실제 데이터 목록(카테고리 배열)을 포함해, 목록 화면 및 검색 결과에서 활용합니다.",
+        "required": [
+          "pagination",
+          "data"
+        ]
+      },
+      "ICategory": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "카테고리의 고유 식별자(UUID).\n\nPrisma 'categories.id' 컬럼. 예: 'b4682df2-b264-4e1b-807d-381340390a64'."
+          },
+          "name": {
+            "type": "string",
+            "description": "카테고리 이름(고유).\n\nPrisma 'categories.name' 컬럼. 예: '정치', '경제'"
+          },
+          "description": {
+            "type": "string",
+            "description": "카테고리 상세 설명.\n\nPrisma 'categories.description' 컬럼. 예: '정치 제도와 관련된 모든 주제를 다룹니다.'"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "카테고리 생성 일시(ISO8601).\n\nPrisma 'categories.created_at' 컬럼. 예: '2024-06-09T09:00:00+09:00'."
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "description",
+          "created_at"
+        ],
+        "description": "토론 게시판의 주제분류(카테고리) 정보를 담는 엔터티입니다.\n\n각 카테고리는 고유명, 설명, 생성일시 필드를 가지며 게시글(Posts)과 1:N 관계입니다. 관리자가 생성·관리하며, 게시글 작성 시 반드시 할당해야 하는 구조입니다."
+      },
+      "ICategory.ICreate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "신규 카테고리의 이름(고유). 예: '시사', '국제'."
+          },
+          "description": {
+            "type": "string",
+            "description": "카테고리 상세 설명. 예: '글로벌 경제 및 정치 이슈를 다루는 공간입니다.'"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "description": "카테고리 신규 생성시 전달하는 요청 바디 객체입니다.\n\n이름(고유), 설명을 필수로 제공해야 하며, 관리자가 카테고리를 추가할 때 활용됩니다."
+      },
+      "ICategory.IUpdate": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "변경할 카테고리명(옵션). 예: '사회'"
+          },
+          "description": {
+            "type": "string",
+            "description": "변경할 카테고리 설명(옵션)."
+          }
+        },
+        "description": "기존 카테고리의 이름·설명을 수정하는 요청 바디입니다.\n\n두 필드 모두 선택적이며, 하나 또는 모두 변경할 수 있습니다.",
+        "required": []
+      },
+      "ICategory.IDeleteResult": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "삭제 성공 여부. true 이면 정상 삭제, false 이면 오류."
+          },
+          "message": {
+            "type": "string",
+            "description": "삭제 결과 메시지(실패 이유, 성공 안내 등)."
+          }
+        },
+        "required": [
+          "success",
+          "message"
+        ],
+        "description": "카테고리 삭제(soft/hard delete) 결과를 나타내는 오브젝트입니다.\n\n성공/실패의 플래그 및 설명 메시지를 포함해 후처리 사용자 안내에 활용합니다."
+      },
+      "IPost.IRequest": {
+        "type": "object",
+        "properties": {
+          "category_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "검색/필터링용 카테고리 ID.\n\n특정 카테고리 내 게시글만 조회하고자 할 때 사용합니다."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "검색/필터링용 작성자(유저) ID.\n\n특정 사용자가 작성한 게시글만 조회할 때 활용합니다."
+          },
+          "title": {
+            "type": "string",
+            "description": "제목 키워드 검색 (부분 일치 허용).\n\n게시글의 제목에 포함된 키워드로 검색합니다."
+          },
+          "content": {
+            "type": "string",
+            "description": "본문 키워드 검색 (부분 일치 허용).\n\n게시글의 전체 텍스트에서 키워드로 검색합니다."
+          },
+          "created_from": {
+            "type": "string",
+            "format": "date-time",
+            "description": "게시글 생성 시작일(검색 필터용, ISO8601)."
+          },
+          "created_to": {
+            "type": "string",
+            "format": "date-time",
+            "description": "게시글 생성 종료일(검색 필터용, ISO8601)."
+          },
+          "page": {
+            "type": "integer",
+            "description": "페이지 번호(1 이상).",
+            "minimum": 1
+          },
+          "limit": {
+            "type": "integer",
+            "description": "페이지당 데이터 수(기본 100).",
+            "minimum": 1
+          }
+        },
+        "description": "게시글 검색, 필터, 페이징에 요청 정보로 사용되는 객체입니다.\n\n카테고리, 작성자, 키워드, 기간, 페이징 등 다양한 필터를 지원하여 게시글 탐색 UX를 구현합니다.",
+        "required": [
+          "page",
+          "limit"
+        ]
+      },
+      "IPageIPost": {
+        "type": "object",
+        "properties": {
+          "pagination": {
+            "$ref": "#/components/schemas/IPage.IPagination",
+            "description": "페이지네이션 메타데이터"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IPost"
+            },
+            "description": "검색 결과 게시글(Posts) 배열"
+          }
+        },
+        "required": [
+          "pagination",
+          "data"
+        ],
+        "description": "게시글 검색/조회 결과를 담는 페이지 컨테이너 타입입니다.\n\n페이지 정보와 게시글 배열을 함께 반환하여 결과 화면에서 활용합니다."
+      },
+      "IPost": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "게시글의 고유 ID (Prisma 'posts.id')."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "작성자(유저) ID (Prisma 'posts.user_id')."
+          },
+          "category_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "카테고리 ID (Prisma 'posts.category_id')."
+          },
+          "title": {
+            "type": "string",
+            "description": "게시글 제목 (Prisma 'posts.title')."
+          },
+          "content": {
+            "type": "string",
+            "description": "게시글 본문 (Prisma 'posts.content')."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "생성 시각 (Prisma 'posts.created_at')."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "수정 시각 (Prisma 'posts.updated_at')."
+          },
+          "deleted_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "description": "삭제(soft delete) 시각(Prisma 'posts.deleted_at'). 삭제 안된 경우 null."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "삭제(soft delete) 시각(Prisma 'posts.deleted_at'). 삭제 안된 경우 null."
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "category_id",
+          "title",
+          "content",
+          "created_at",
+          "updated_at"
+        ],
+        "description": "토론 게시판의 게시글(포스트) 정보를 담는 도메인 오브젝트입니다.\n\n작성자, 카테고리, 제목·본문, 생성/수정/삭제일 등을 보유하여 커뮤니티 핵심 콘텐츠 구조를 이룹니다."
+      },
+      "IPost.ICreate": {
+        "type": "object",
+        "properties": {
+          "category_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "작성할 게시글의 카테고리 ID. (필수)"
+          },
+          "title": {
+            "type": "string",
+            "description": "게시글 제목. 예: '2025년 물가·인플레이션 전망'"
+          },
+          "content": {
+            "type": "string",
+            "description": "게시글 본문 내용. (텍스트·포맷팅 지원)"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "작성자(Author) ID. 회원 작성 시 필수"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "생성시각 (시스템 자동 할당이지만, 조직 배치용으로도 허용될 수 있음)"
+          }
+        },
+        "required": [
+          "category_id",
+          "title",
+          "content",
+          "user_id"
+        ],
+        "description": "게시글 신규 작성 요청에 전달되는 바디입니다.\n\n카테고리, 제목, 본문, 작성자 정보를 반드시 포함해야 합니다. 생성일시 등은 서버에서 자동 처리합니다."
+      },
+      "IPost.IUpdate": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "description": "변경할 게시글 제목 (옵션)"
+          },
+          "content": {
+            "type": "string",
+            "description": "변경할 게시글 본문 (옵션)"
+          },
+          "category_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "변경할 카테고리 ID (옵션)"
+          }
+        },
+        "description": "기존 게시글(포스트)의 제목/본문/카테고리를 수정하는 요청 바디입니다.\n\n각 필드는 선택값으로, 일부만 수정 가능하며 누락시 기존 값 유지합니다.",
+        "required": []
+      },
+      "IPost.IDeleteResult": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "description": "삭제(Soft 또는 Hard) 성공 여부"
+          },
+          "message": {
+            "type": "string",
+            "description": "삭제 결과 메시지"
+          }
+        },
+        "required": [
+          "success",
+          "message"
+        ],
+        "description": "게시글 삭제(soft/hard) 요청 결과나 상태를 반환하는 결과 객체입니다.\n\n정상 삭제(숨김) 시 success=true, 실패 시 false와 설명 메시지를 제공합니다."
+      },
+      "IComment.IRequest": {
+        "type": "object",
+        "properties": {
+          "postId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The unique ID of the target post to which comments should be filtered.\n\nBased on the comments table, 'post_id' field links the comment to a particular post for thread-based filtering. Sourced from the business rule: 'Each Comment is linked to a Post.'"
+          },
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The unique ID of the user who authored comments.\n\nDesigned for filtering comments made by a specific user, as referenced in the comments.user_id column."
+          },
+          "parentId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "description": "The parent comment's ID, for retrieving or searching nested replies.\n\nThis relates to the self-referential thread system: filtering for replies to a specific comment."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The parent comment's ID, for retrieving or searching nested replies.\n\nThis relates to the self-referential thread system: filtering for replies to a specific comment."
+          },
+          "search": {
+            "type": "string",
+            "description": "A keyword or phrase to search in comment content.\n\nImplements full-text search capability as referenced in content field and API description."
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0,
+            "description": "The starting index for pagination.\n\nAllows skipping records in list pagination, supporting usability in large thread navigation."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "default": 20,
+            "description": "Maximum number of records to return per page. Defaults to 20 if not specified."
+          },
+          "sort": {
+            "type": "string",
+            "description": "Sorting order or field, e.g., 'created_at:desc', 'created_at:asc'.\n\nAligns with thread listing sorting as described in business and API requirements."
+          }
+        },
+        "description": "Defines filtering, pagination, and sorting criteria for retrieving comments. Fields draw directly from the requirements and Prisma comments model.\n\nThis allows filtering by comments made on a post, by a user, or as replies to a parent, along with keyword search and pagination. Reflects full API and business use cases for comment listing endpoints.",
+        "required": []
+      },
+      "IPageIComment": {
+        "type": "object",
+        "properties": {
+          "pagination": {
+            "$ref": "#/components/schemas/IPage.IPagination"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IComment.ISummary"
+            },
+            "description": "A list of comment summary objects on the current page.\n\nEach item is a concise representation of a comment as described in business use-cases: post/reply thread listings."
+          }
+        },
+        "required": [
+          "pagination",
+          "data"
+        ],
+        "description": "A paginated list of comment summaries, including pagination metadata (page, limit, total, etc.) and a summary array.\n\nCombines IPage (standard) with IComment.ISummary as required by comment browsing scenarios."
+      },
+      "IComment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Primary Key. Unique identifier for each comment (see comments.id in schema).\n\nAssigned at creation; required for retrieval, update, and reference by other entities (votes, replies)."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Author's {@link users.id}.\n\nStores the user's unique identifier responsible for the comment, using the relationship to users. Enables auditing, author lookup, and permissions checks."
+          },
+          "post_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The ID of the post this comment is attached to ({@link posts.id}).\n\nCrucial for associating the comment as a reply to a given post, reflecting business rules and ERD documentation."
+          },
+          "parent_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "description": "Parent comment's {@link comments.id}.\n\nUsed for nested (threaded) replies. Null for top-level comments. Enables tree-based conversations."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parent comment's {@link comments.id}.\n\nUsed for nested (threaded) replies. Null for top-level comments. Enables tree-based conversations."
+          },
+          "content": {
+            "type": "string",
+            "description": "Main text of the comment; user-provided reply content.\n\nReferences the comments.content field; holds message body visible to users."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp when the comment was first authored (see comments.created_at).\n\nUsed for chronological ordering, moderation, and audit."
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of last edit to the comment (see comments.updated_at).\n\nEnables edit history, moderation, or user accountability."
+          },
+          "deleted_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "description": "Soft deletion timestamp (see comments.deleted_at).\n\nNull if not deleted; otherwise contains date/time when marked deleted for moderation/auditing."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Soft deletion timestamp (see comments.deleted_at).\n\nNull if not deleted; otherwise contains date/time when marked deleted for moderation/auditing."
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "post_id",
+          "content",
+          "created_at",
+          "updated_at"
+        ],
+        "description": "Represents a Comment record, as per the Posts domain comments model and requirements analysis.\n\nIncludes all primary properties as described in the Prisma schema, with full typing and references to related entities (users, posts, parent comments). Supports auditability, moderation, and business logic for threaded conversations."
+      },
+      "IComment.ICreate": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User ID (author's identifier). Must reference an existing user. Required to ensure only registered users may comment.\n\nFulfills business rule that only registered users can create comments."
+          },
+          "post_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the post this comment is on. Implements business rule requiring every comment to be attached to a post."
+          },
+          "parent_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "description": "Parent comment's ID for nested replies. Optional. Enables thread hierarchy as in the business requirements."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parent comment's ID for nested replies. Optional. Enables thread hierarchy as in the business requirements."
+          },
+          "content": {
+            "type": "string",
+            "description": "Main comment body text. Required; validated for length and content rules by business logic."
+          }
+        },
+        "required": [
+          "user_id",
+          "post_id",
+          "content"
+        ],
+        "description": "Object for creating a new comment. Includes required properties for new replies, including references to post, author, and optionally a parent for nested threading. Matches business rules requiring each comment to have an associated user (author) and post, plus the option to nest under another comment."
+      },
+      "IComment.IUpdate": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "New comment body, if editing. Must meet length/content requirements from business logic."
+          },
+          "deleted_at": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "date-time",
+                "description": "Timestamp for marking a comment as deleted (for moderation/audit). Set to current time for 'soft delete,' or null to un-delete if allowed."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Timestamp for marking a comment as deleted (for moderation/audit). Set to current time for 'soft delete,' or null to un-delete if allowed."
+          }
+        },
+        "description": "Object for updating an existing comment (edit or soft-delete). User or moderator may use this to change content or to mark the comment as deleted.\n\nReferences the comments Prisma model and moderation business rules: only content or soft-delete flag is usually editable.",
+        "required": []
+      },
+      "IComment.IDeleteResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the comment that was deleted."
+          },
+          "deleted": {
+            "type": "boolean",
+            "description": "Status: true if successfully deleted (soft or hard as per policy), false otherwise."
+          },
+          "message": {
+            "type": "string",
+            "description": "A confirmation or informative message about the deletion result."
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ],
+        "description": "Result object for delete operations on comments. Confirms deletion (soft or hard), as required by business rules and audit requirements. Returns the comment ID, deletion status, and optional human-readable message."
+      },
+      "IVote.IRequest": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier of the user who cast the vote. Used for filtering votes by a specific voter (see votes.user_id in schema and ERD)."
+          },
+          "postId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "description": "Unique identifier of the post that received the vote (see votes.post_id). Mutually exclusive with commentId."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Unique identifier of the post that received the vote (see votes.post_id). Mutually exclusive with commentId."
+          },
+          "commentId": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "description": "Unique identifier of the comment that received the vote (see votes.comment_id). Mutually exclusive with postId."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Unique identifier of the comment that received the vote (see votes.comment_id). Mutually exclusive with postId."
+          },
+          "offset": {
+            "type": "integer",
+            "format": "int32",
+            "default": 0,
+            "description": "Starting index for pagination (default 0)."
+          },
+          "limit": {
+            "type": "integer",
+            "format": "int32",
+            "default": 20,
+            "description": "Maximum number of records to return per page."
+          },
+          "sort": {
+            "type": "string",
+            "description": "Sorting field or order (default 'created_at:desc')."
+          }
+        },
+        "description": "Filtering, pagination, and sorting criteria for votes listing requests, following the votes table business logic and related requirements.\n\nFilters support querying by voter, target post, or comment, with support for pagination and sorting. Business rules enforce only mutual exclusivity between postId/commentId (never both set).",
+        "required": []
+      },
+      "IPageIVote": {
+        "type": "object",
+        "properties": {
+          "pagination": {
+            "$ref": "#/components/schemas/IPage.IPagination"
+          },
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IVote.ISummary"
+            },
+            "description": "Array of vote summary records on this page."
+          }
+        },
+        "required": [
+          "pagination",
+          "data"
+        ],
+        "description": "A paginated set of votes, as used in vote listing, audit history, or analytics use-cases. Follows IPage pattern with IVote.ISummary records per voting business and DB design."
+      },
+      "IVote": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Primary Key. Unique identifier for each vote record (votes.id)."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The ID of the user casting the vote (votes.user_id), referencing users table for author."
+          },
+          "post_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "description": "The voted post's ID (votes.post_id). Mutually exclusive with comment_id."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The voted post's ID (votes.post_id). Mutually exclusive with comment_id."
+          },
+          "comment_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "description": "The voted comment's ID (votes.comment_id). Mutually exclusive with post_id."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The voted comment's ID (votes.comment_id). Mutually exclusive with post_id."
+          },
+          "value": {
+            "type": "integer",
+            "description": "Value of the vote (+1 for upvote, -1 for downvote). Aggregated to compute content rankings."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of when the vote was created (votes.created_at)."
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "value",
+          "created_at"
+        ],
+        "description": "Represents a Vote as defined in the votes table: one record for each upvote/downvote action on a post or comment. Covers voter ID, target (post or comment), value (+1/-1), and creation timestamp. Fully aligned with requirements analysis and business logic for single-vote-per-user-per-content."
+      },
+      "IVote.ICreate": {
+        "type": "object",
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the user casting the vote. References the users table; ensures only registered users can vote."
+          },
+          "value": {
+            "type": "integer",
+            "description": "Vote value: +1 or -1 as per business requirements. Used for up/down voting of posts/comments."
+          },
+          "post_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "description": "Target post's ID, if voting on a post. Mutually exclusive with comment_id."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Target post's ID, if voting on a post. Mutually exclusive with comment_id."
+          },
+          "comment_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "description": "Target comment's ID, if voting on a comment. Mutually exclusive with post_id."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Target comment's ID, if voting on a comment. Mutually exclusive with post_id."
+          }
+        },
+        "required": [
+          "user_id",
+          "value"
+        ],
+        "description": "Object for creating a new vote as per voting business rules:\n- user_id: registered voter\n- value: +1 (upvote) or -1 (downvote)\n- target: must specify either post_id or comment_id (never both)\nEnforces one vote per user/content as described in requirements."
+      },
+      "IVote.IUpdate": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "integer",
+            "description": "The new vote value. Allows changing an upvote to downvote (or vice versa), strictly for existing votes per business rules."
+          }
+        },
+        "required": [
+          "value"
+        ],
+        "description": "Object for updating existing votes, specifically editing the vote value (from +1 to -1, etc.).\n\nDoes not allow changing the vote target (post_id/comment_id); supports audit and business logic for corrections."
+      },
+      "IVote.IDeleteResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "ID of the vote record that was deleted."
+          },
+          "deleted": {
+            "type": "boolean",
+            "description": "Indicates if the vote was successfully deleted."
+          },
+          "message": {
+            "type": "string",
+            "description": "A human-readable confirmation message about the delete operation."
+          }
+        },
+        "required": [
+          "id",
+          "deleted"
+        ],
+        "description": "Delete operation result for a vote record. Returns deleted vote's ID, deletion status, and optional result message, as required by business logic and for user/admin confirmation."
+      },
+      "IComment.ISummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the comment."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "User (author) of the comment."
+          },
+          "post_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Parent post for the comment."
+          },
+          "parent_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "description": "Parent comment (if any)."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Parent comment (if any)."
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Timestamp of comment creation."
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "post_id",
+          "created_at"
+        ],
+        "description": "A concise summary type for comments, covering the most important references and metadata for paginated or overview lists."
+      },
+      "IVote.ISummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Unique identifier for the vote."
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Voter's user ID."
+          },
+          "post_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "description": "Target post."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Target post."
+          },
+          "comment_id": {
+            "oneOf": [
+              {
+                "type": "string",
+                "format": "uuid",
+                "description": "Target comment."
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Target comment."
+          },
+          "value": {
+            "type": "integer",
+            "description": "Vote value (+1 or -1)."
+          }
+        },
+        "required": [
+          "id",
+          "user_id",
+          "value"
+        ],
+        "description": "Summary of a Vote for paginated/result lists, not including creation date but identifying all main relationships and value."
+      }
+    }
+  }
+}

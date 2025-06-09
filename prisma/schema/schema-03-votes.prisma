@@ -1,0 +1,44 @@
+/// Vote records - This implements the voting/feedback requirements section described in the requirements analysis, enabling users to provide positive or negative feedback on posts and comments in the discussion board. 
+///
+/// Business purpose: Allows users to upvote or downvote content, surfacing high-quality posts and comments, while discouraging low-quality contributions. Only registered users can cast votes and only one vote per content item per user is allowed, enforcing fairness and preventing manipulation. Used to calculate real-time content ranking and trust metrics.
+///
+/// Key relationships: Votes always belong to a user and point to either a post or a comment. The voted target is mutually exclusive: each row references either a post or a comment, but never both. 
+///
+/// Special behaviors: Unique constraint ensures one vote per user per post or comment. Cascade deletion if the user or voted content is removed, to maintain data integrity.
+///
+/// @namespace Votes
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model votes {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for each vote record.
+  id String @id @db.Uuid
+  
+  /// Voter's user reference - Links each vote to the user who cast it. Implements the requirement that only registered users can vote. Business meaning: Tracks voting history and enforces unique voting constraints. Example: User 'U' upvotes a comment, linking the vote to 'U's user_id.
+  user_id String @db.Uuid
+  
+  /// Target post's reference - References the post being voted on, if the vote relates to a post (and not a comment). Implements mutual exclusivity rule and enables vote tallies for posts. Example: Voting on a thread increases the tally on the referenced post. Constraint: Only one of post_id or comment_id is non-null per row.
+  post_id String? @db.Uuid
+  
+  /// Target comment's reference - References the comment being voted on, if applicable. Implements mutual exclusivity rule as with posts. Example: Voting on a reply records the vote linked to this comment. Only one of post_id or comment_id is set per vote record.
+  comment_id String? @db.Uuid
+  
+  /// Vote value - Implements the upvote/downvote requirement. Stores +1 for upvote, -1 for downvote. Business meaning: This value is aggregated to produce content rankings. Example: A +1 value indicates an upvote from a user.
+  value Int @db.Integer
+  
+  /// Vote timestamp - Implements auditing requirements for vote tracking. Stores the date and time the vote was made. Used for analytics and to enforce time-based voting limits, if ever required by policy.
+  created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  post posts? @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  comment comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  
+  @@unique([user_id, post_id])
+  @@unique([user_id, comment_id])
+  @@index([post_id, created_at])
+  @@index([comment_id, created_at])
+}

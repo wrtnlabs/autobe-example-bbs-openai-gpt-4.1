@@ -1,0 +1,121 @@
+/// User information - This implements the 'User' entity from the requirements analysis document (03_data_structure_and_business_rules.md). 
+///
+/// Represents registered members of the discussion board. Each user record holds public profile data and permissions (role and status). For example, Alice with email alice@email.com can be a regular user, moderator, or admin.
+///
+/// Key relationships: references user_roles for permission, and relates to posts, comments, and votes they create.
+/// Special behaviors: emails are unique; passwords are stored securely; role assignment required.
+///
+/// @namespace Core
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model users {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. 
+  /// Unique identifier for each user.
+  id String @id @db.Uuid
+  
+  /// Role of the user. Target model's {@link user_roles.id}.
+  /// Determines user permissions such as regular member, moderator, or administrator.
+  user_role_id String @db.Uuid
+  
+  /// Username visible on the platform - Implements profile display requirement. Must be unique and public. For example, 'politicoFan88'.
+  username String
+  
+  /// User's email address - Used for login and notifications. Must be unique. For example, 'user@example.com'.
+  email String
+  
+  /// Optional short biography - Lets users share info about themselves. For example, 'Economics student, debate enthusiast.'
+  bio String?
+  
+  /// Hashed password - Implements security requirement. Stores a hashed version of the user password for authentication. Example: long hash string. Not public.
+  password_hash String
+  
+  /// Account creation timestamp - Implements auditability. For example, '2024-06-09T10:00:00+09:00'.
+  created_at DateTime @db.Timestamptz
+  
+  /// Timestamp of last profile update - Implements history/auth traceability. For example, '2024-07-01T12:30:00+09:00'.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Account status - Implements moderation/authentication rules. For example, 'active', 'suspended', or 'banned'.
+  status String
+  
+  //----
+  // RELATIONS
+  //----
+  role user_roles @relation(fields: [user_role_id], references: [id], onDelete: Cascade)
+  
+  posts posts[]
+  comments comments[]
+  votes votes[]
+  
+  @@index([user_role_id])
+  
+  @@unique([username])
+  @@unique([email])
+  @@index([created_at])
+}
+
+/// User role definitions - This implements the role structure outlined in user roles section of the requirements analysis document (02_key_features_and_user_roles.md).
+///
+/// Defines different permissions and capabilities for users. For example, 'member', 'moderator', 'administrator'.
+///
+/// Key relationships: referenced by users table; no direct link to posts or comments.
+/// Special behaviors: role 'name' must be unique.
+///
+/// @namespace Core
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model user_roles {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for user role.
+  id String @id @db.Uuid
+  
+  /// Role label - Implements user roles requirement. Example: 'member', 'moderator', 'administrator'. Must be unique.
+  name String
+  
+  /// Role description - Gives context about permissions and duties; e.g., 'Can moderate comments and suspend users' for moderators.
+  description String
+  
+  //----
+  // RELATIONS
+  //----
+  users users[]
+  
+  @@unique([name])
+}
+
+/// Discussion categories - This covers the 'Category' entity from the requirements document (03_data_structure_and_business_rules.md).
+///
+/// Represents the main topic divisions organizing posts. For example, 'Politics', 'Economics', 'International Affairs'.
+///
+/// Key relationships: referenced by posts; managed by administrators.
+/// Special behaviors: unique name required, can be suggested by users but created by admin.
+///
+/// @namespace Core
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model categories {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for category.
+  id String @id @db.Uuid
+  
+  /// Category name - Implements content organization and navigation requirement. For example, 'Politics'. Must be unique per category.
+  name String
+  
+  /// Category description - Explains scope. For example, 'Discussion about domestic and international political systems, governance, and related events.'
+  description String
+  
+  /// Timestamp when the category was added - Implements audit trail. Example: '2024-06-09T09:00:00+09:00'.
+  created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  posts posts[]
+  
+  @@unique([name])
+  @@index([created_at])
+}
