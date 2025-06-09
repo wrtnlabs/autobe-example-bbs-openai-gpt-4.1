@@ -1,0 +1,95 @@
+/// [Notification Delivery Record] - This implements the requirement for notifying users about platform events such as replies, mentions, moderator actions, votes, and system alerts (from requirements 'notifications', 'core features', 'moderation', and 'user roles'). 
+///
+/// Delivers individual notification events for users, providing an auditable record of all notifications sent to a user. Maintains 3NF compliance by only storing atomic, non-redundant info about notification events—reference target users, origin entities, and optional linking to related post/comment/other entities, with all aggregation handled separately in materialized views if needed. For example, a user receives a notification when their post is replied to, or they're mentioned in a comment.
+///
+/// Key relationships: {@link users}, {@link posts}, {@link comments}, {@link moderation_logs}, {@link polls}.
+/// Special behaviors: Notifications are immutable (no update on delivery data), can be marked as read, and may reference various possible event sources through foreign keys.
+///
+/// @namespace Notifications
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model notifications {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary Key] - Implements unique notification ID. Ensures each notification is individually addressable, prevents duplication, and supports normalization. For example, used to mark a specific notification as read or to fetch details for a user.
+  id String @id @db.Uuid
+  
+  /// [User receiving notification] - References the recipient user's {@link users.id}. Implements core requirement to notify specific users. Normalized as a reference; for example, Daniel receives a notification when their post is upvoted.
+  user_id String @db.Uuid
+  
+  /// [Related Post] - References the post {@link posts.id} if the notification is about a post (reply, vote, mention, etc). Not always present (nullable). For example, a notification about a mention in a post.
+  post_id String? @db.Uuid
+  
+  /// [Related Comment] - References comment {@link comments.id} if the notification is about a comment (reply, mention, etc). Fulfills notification requirement for comment-related actions. Nullable. For example, a notification about a reply to the user's comment.
+  comment_id String? @db.Uuid
+  
+  /// [Related Poll] - References {@link polls.id} if notification pertains to a poll. Implements notification requirement for poll votes/closures/etc. Nullable. Example: 'Your poll has closed.'
+  poll_id String? @db.Uuid
+  
+  /// [Related Moderation Action] - Links moderation actions for notifications of warnings, content removals, etc. Implements moderation notification requirement. Nullable. For example, a user is notified that their post was removed by a moderator.
+  moderation_log_id String? @db.Uuid
+  
+  /// [Notification type] - Implements notification type requirement (reply, mention, vote, moderator_action, system, poll, etc). Business meaning: Encodes what kind of system or user event triggered the notification. Ensures normalization by distinguishing types as atomic strings, never as redundant flag fields. For example: 'post_reply', 'comment_mention', 'upvote', 'user_warning', 'system_alert'.
+  type String
+  
+  /// [Notification message] - Implements business rule to communicate reason/context with notification. Stores the user-friendly string visible in UI. Ensures normalization by providing the message per-notification (updates in system messages do not propagate). For example: 'Your post was replied to by Alice.'
+  message String
+  
+  /// [Read Status] - Implements requirement to let users manage/read/unread notifications. Indicates if user has marked this notification as read. Ensures normalization by not summarizing across users. For example, the notification appears as unread until user checks it.
+  is_read Boolean
+  
+  /// [Creation timestamp] - Implements audit/event traceability. Records when the notification was generated. Ensures normalization as each notification event's time is unique. For example: Used to show '5 minutes ago' in notification list.
+  created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  post posts? @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  comment comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  poll polls? @relation(fields: [poll_id], references: [id], onDelete: Cascade)
+  moderation_log moderation_logs? @relation(fields: [moderation_log_id], references: [id], onDelete: Cascade)
+  
+  @@index([post_id])
+  @@index([comment_id])
+  @@index([poll_id])
+  @@index([moderation_log_id])
+  
+  @@unique([user_id, created_at, type, message])
+  @@index([user_id, is_read, created_at])
+  @@index([message(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// [Notification Preferences per User] - This implements requirements for customizable notification settings (from 'user roles', 'privacy and data protection', and 'core features').
+///
+/// Stores atomic settings allowing each user to opt in/out of specific notification types. Maintains normalization by recording one setting row per (user_id, type). For example, a user disables email notifications for upvotes but keeps them enabled for mentions.
+///
+/// Key relationships: {@link users}.
+/// Special behaviors: Can add extensibility for channel preferences (email, web, etc) in future, but each row remains atomic for (user_id, type[, channel]).
+///
+/// @namespace Notifications
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model notification_preferences {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary Key] - Unique notification preference entry per user and type. Enables normalization and row addressability. For example, updating a user's preference for 'post_reply' notifications.
+  id String @id @db.Uuid
+  
+  /// [Settings for User] - References {@link users.id}. Implements per-user setting aspect of the notification preferences requirement. Normalized; enables a user to have their own settings, without duplicating for all users. For example, Alice configures her notification preferences on her account page.
+  user_id String @db.Uuid
+  
+  /// [Notification type] - Implements per-type notification setting requirement. Stores the kind of notification the preference controls (e.g., 'post_reply', 'comment_mention', etc). Ensures normalization by using an atomic string per type, not a repeated group or array. For example: Alice disables 'upvote' notifications only.
+  type String
+  
+  /// [Whether enabled] - Implements the requirement for enabling/disabling a specific notification type. Business meaning: true if the user wants this notification, false to suppress. Ensures normalization by one flag per (user, type) pair. Example: User has enabled = false for 'poll_closed' notification.
+  enabled Boolean
+  
+  //----
+  // RELATIONS
+  //----
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([user_id, type])
+  @@index([type])
+}

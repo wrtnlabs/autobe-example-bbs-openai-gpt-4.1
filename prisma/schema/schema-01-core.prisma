@@ -1,9 +1,9 @@
-/// User information - This implements the 'User' entity from the requirements analysis document (03_data_structure_and_business_rules.md). 
+/// [User account entity] - This implements the core requirement of registering, identifying, and authenticating individuals using the platform (see Section 3 of the requirements for 'Registration', Section 8 for 'User Authentication'). 
 ///
-/// Represents registered members of the discussion board. Each user record holds public profile data and permissions (role and status). For example, Alice with email alice@email.com can be a regular user, moderator, or admin.
+/// Provides a unique account for each community member—serves as the root identity for all activities. Maintains 3NF by storing only atomic, non-derivable data (no calculated or aggregated fields). For example, every post, comment, or vote will reference this account. 
 ///
-/// Key relationships: references user_roles for permission, and relates to posts, comments, and votes they create.
-/// Special behaviors: emails are unique; passwords are stored securely; role assignment required.
+/// Key relationships: linked 1:1 to {@link user_profiles}, has many {@link role_assignments}, referenced by all domain models (posts, comments, etc.).
+/// Special behaviors: Unique constraint on 'email', soft deletion tracked by 'deleted_at'.
 ///
 /// @namespace Core
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
@@ -11,111 +11,224 @@ model users {
   //----
   // COLUMNS
   //----
-  /// Primary Key. 
-  /// Unique identifier for each user.
+  /// Primary Key. Unique identifier for each user account.
   id String @id @db.Uuid
   
-  /// Role of the user. Target model's {@link user_roles.id}.
-  /// Determines user permissions such as regular member, moderator, or administrator.
-  user_role_id String @db.Uuid
-  
-  /// Username visible on the platform - Implements profile display requirement. Must be unique and public. For example, 'politicoFan88'.
-  username String
-  
-  /// User's email address - Used for login and notifications. Must be unique. For example, 'user@example.com'.
+  /// [User email address] - Implements requirement for unique, contactable identifier (see registration/authentication). 
+  ///
+  /// Used to identify accounts and enable password reset or notifications. Maintains normalization by storing only in users. For example, Jane registers with jane@email.com.
+  /// Constraint: Unique per user, validated on registration.
   email String
   
-  /// Optional short biography - Lets users share info about themselves. For example, 'Economics student, debate enthusiast.'
-  bio String?
+  /// [Hashed user password] - Implements authentication and security requirements. 
+  ///
+  /// Securely stores the password for login. Maintains normalization by separating secrets from profile info. For example, Jane's original password is never stored—only the hash is.
+  /// Constraint: Must be properly hashed, never in plaintext.
+  hashed_password String
   
-  /// Hashed password - Implements security requirement. Stores a hashed version of the user password for authentication. Example: long hash string. Not public.
-  password_hash String
-  
-  /// Account creation timestamp - Implements auditability. For example, '2024-06-09T10:00:00+09:00'.
+  /// [Account creation time] - For audit and registration timing (see technical/security requirements). 
+  ///
+  /// Records when the user joined. For example, audit trails.
+  /// Constraint: Always present.
   created_at DateTime @db.Timestamptz
   
-  /// Timestamp of last profile update - Implements history/auth traceability. For example, '2024-07-01T12:30:00+09:00'.
-  updated_at DateTime @db.Timestamptz
-  
-  /// Account status - Implements moderation/authentication rules. For example, 'active', 'suspended', or 'banned'.
-  status String
+  /// [Account deletion timestamp] - For soft deletions and GDPR compliance (see privacy/data rules). 
+  ///
+  /// Allows disabling account while preserving data for audit/compliance. For example, deactivated users do not appear active but records remain.
+  /// Constraint: Nullable; null means account is active.
+  deleted_at DateTime? @db.Timestamptz
   
   //----
   // RELATIONS
   //----
-  role user_roles @relation(fields: [user_role_id], references: [id], onDelete: Cascade)
-  
+  user_profiles user_profiles?
+  role_assignments role_assignments[]
+  threads threads[]
   posts posts[]
+  post_edits post_edits[]
+  post_votes post_votes[]
+  poll_votes poll_votes[]
   comments comments[]
-  votes votes[]
+  comment_edits comment_edits[]
+  comment_votes comment_votes[]
+  moderation_logs_of_moderator_id moderation_logs[] @relation("moderation_logs_of_moderator_id")
+  moderation_logs_of_target_user_id moderation_logs[] @relation("moderation_logs_of_target_user_id")
+  post_reports post_reports[]
+  comment_reports comment_reports[]
+  user_warnings_of_user_id user_warnings[] @relation("user_warnings_of_user_id")
+  user_warnings_of_moderator_id user_warnings[] @relation("user_warnings_of_moderator_id")
+  suspensions_of_user_id suspensions[] @relation("suspensions_of_user_id")
+  suspensions_of_moderator_id suspensions[] @relation("suspensions_of_moderator_id")
+  bans_of_user_id bans[] @relation("bans_of_user_id")
+  bans_of_moderator_id bans[] @relation("bans_of_moderator_id")
+  notifications notifications[]
+  notification_preferences notification_preferences[]
+  user_settings user_settings?
   
-  @@index([user_role_id])
-  
-  @@unique([username])
   @@unique([email])
   @@index([created_at])
 }
 
-/// User role definitions - This implements the role structure outlined in user roles section of the requirements analysis document (02_key_features_and_user_roles.md).
+/// [Detailed user profile] - Implements profile pages/activity history from requirements Section 4. 
 ///
-/// Defines different permissions and capabilities for users. For example, 'member', 'moderator', 'administrator'.
+/// Stores additional, non-auth authentication data and makes it available for profile display. Maintains normalization by 1:1 relation with {@link users}. For example, display name, bio, avatar. 
 ///
-/// Key relationships: referenced by users table; no direct link to posts or comments.
-/// Special behaviors: role 'name' must be unique.
+/// Key relationships: 1:1 with users (foreign key unique), referenced by posts, comments for rendering user identity. 
+/// Special behavior: Foreign key required, unique constraint enforces true 1:1.
 ///
 /// @namespace Core
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model user_roles {
+model user_profiles {
   //----
   // COLUMNS
   //----
-  /// Primary Key. Unique identifier for user role.
+  /// Primary Key. Unique identifier for the profile record.
   id String @id @db.Uuid
   
-  /// Role label - Implements user roles requirement. Example: 'member', 'moderator', 'administrator'. Must be unique.
+  /// Owner user's {@link users.id}. 
+  ///
+  /// Every profile is attached to a real user account; ensures traceability and enforces integrity. For example, used to load Jane's profile page.
+  user_id String @db.Uuid
+  
+  /// [Display name] - Implements public identity and social/discussion requirements. 
+  ///
+  /// Username shown on posts/comments—distinct from authentication email. Normalized by keeping only in profile, not user table. For example: 'PoliticoMark' is Jane's visible name.
+  /// Constraint: Required; must be non-null.
+  display_name String
+  
+  /// [Avatar image URL] - Profile personalization from future enhancements and UI requirements.
+  ///
+  /// Holds a link to the user's profile image, increasing engagement and personalization. For example, shows small image next to comments/posts.
+  /// Constraint: Can be null (optional feature).
+  avatar_url String? @db.VarChar(80000)
+  
+  /// [Short biography] - Implements richer profiles and transparency. 
+  ///
+  /// Brief description shown in profiles or tooltips. Maintains normalization; optional per user. For example, 'Economist based in Seoul.'
+  /// Constraint: Null if unused.
+  bio String?
+  
+  /// [Profile creation date] - For display and transparency, matches registration time but kept separate for auditing.  
+  ///
+  /// Shows community tenure; not used for auth or core logic. Example: 'Member since Jan 2025.'
+  /// Constraint: Always required.
+  joined_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([user_id])
+  @@index([display_name])
+}
+
+/// [Role definitions] - Implements all access/permission and business rule requirements (see Sections 3, 7). 
+///
+/// Defines system roles ('user', 'moderator', 'admin'). Keeps role data normalized, separate from assignments. For example, easy to reference for RBAC logic or permissions management.
+///
+/// Key relationships: Referenced by {@link role_assignments}. 
+/// Special behaviors: Unique role name constraint.
+///
+/// @namespace Core
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model roles {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for the role record.
+  id String @id @db.Uuid
+  
+  /// [Role name] - Implements RBAC mapping (user, moderator, admin). 
+  ///
+  /// Used by logic to determine permissions. Maintains normalization by referencing a single source-of-truth for role types. For example, only valid values are assigned in {@link role_assignments}.
+  /// Constraint: Unique per role, non-null.
   name String
   
-  /// Role description - Gives context about permissions and duties; e.g., 'Can moderate comments and suspend users' for moderators.
+  /// [Role description] - Implements requirement for transparency and clarity of permissions. 
+  ///
+  /// Explains function of each role (used for admin UI/help/reference).
+  /// Constraint: Required.
   description String
   
   //----
   // RELATIONS
   //----
-  users users[]
+  role_assignments role_assignments[]
   
   @@unique([name])
 }
 
-/// Discussion categories - This covers the 'Category' entity from the requirements document (03_data_structure_and_business_rules.md).
+/// [User role mapping] - Implements role management and permission enforcement as required for moderation/admin workflow (see Sections 3, 7). 
 ///
-/// Represents the main topic divisions organizing posts. For example, 'Politics', 'Economics', 'International Affairs'.
+/// Assigns users to roles for RBAC. Normalized structure (no duplication)—can change role for user without data redundancy. For example, Jane is promoted to moderator by admin.
 ///
-/// Key relationships: referenced by posts; managed by administrators.
-/// Special behaviors: unique name required, can be suggested by users but created by admin.
+/// Key relationships: Many-to-one with users, many-to-one with roles. Special behaviors: Composite unique constraint (user_id, role_id) prevents duplicate assignments.
 ///
 /// @namespace Core
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model categories {
+model role_assignments {
   //----
   // COLUMNS
   //----
-  /// Primary Key. Unique identifier for category.
+  /// Primary Key. Unique identifier for each assignment record.
   id String @id @db.Uuid
   
-  /// Category name - Implements content organization and navigation requirement. For example, 'Politics'. Must be unique per category.
-  name String
+  /// Assigned user's {@link users.id}. 
+  ///
+  /// Ensures each mapping references a valid user.
+  user_id String @db.Uuid
   
-  /// Category description - Explains scope. For example, 'Discussion about domestic and international political systems, governance, and related events.'
-  description String
+  /// Assigned role's {@link roles.id}. 
+  ///
+  /// Ensures each mapping is to a valid, single role.
+  role_id String @db.Uuid
   
-  /// Timestamp when the category was added - Implements audit trail. Example: '2024-06-09T09:00:00+09:00'.
-  created_at DateTime @db.Timestamptz
+  /// [Assignment timestamp] - Tracks when the role was granted for auditing and transparency (business rules section 7 and security requirements). For example, used in moderator logs. Always required.
+  assigned_at DateTime @db.Timestamptz
   
   //----
   // RELATIONS
   //----
-  posts posts[]
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  role roles @relation(fields: [role_id], references: [id], onDelete: Cascade)
   
+  @@index([role_id])
+  
+  @@unique([user_id, role_id])
+  @@index([assigned_at])
+}
+
+/// [Organizations/teams entity] - Implements requirement for future scalability (e.g., group moderation, org-based permissions—see future enhancements). 
+///
+/// Allows users to be grouped for custom roles, moderation teams, or special permissions. Maintains normalization by keeping organizational data separate from users and roles.
+///
+/// Key relationships: Can be assigned as parent in future model design. 
+/// Special behaviors: Unique constraint on name.
+///
+/// @namespace Core
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model organizations {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for each organization.
+  id String @id @db.Uuid
+  
+  /// [Organization name] - Implements group labeling and lookup for RBAC extension or SSO.
+  ///
+  /// Names are unique. For example, 'European Economists Forum'. Keeps structure normalized for assignments.
+  /// Constraint: Required and unique.
+  name String
+  
+  /// [Description] - Adds context for admins and users. 
+  ///
+  /// Gives a summary or mission statement. For UI display/help.
+  /// Constraint: Can be null.
+  description String?
+  
+  //----
+  // RELATIONS
+  //----
   @@unique([name])
-  @@index([created_at])
 }

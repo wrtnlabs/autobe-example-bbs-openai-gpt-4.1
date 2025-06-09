@@ -1,0 +1,124 @@
+/// Categories - Implements the requirement to organize the board’s discussion threads by topic area (political, economic, etc.) from the requirements document (Core Features, Section 1 and 2). 
+///
+/// This table allows administrators and moderators to create and manage categories for structured navigation and content discovery. Each thread belongs to a category, supporting 3NF by keeping category data atomic and separated. For example, the category 'Economics' would have its own record used by multiple threads.  
+///
+/// Key relationships: threads will have a foreign key to categories. No duplication; all atomic, normalized fields. 
+/// Special behaviors: Only admins and moderators can edit categories.
+///
+/// @namespace CategoriesTags
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model categories {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for the category.
+  id String @id @db.Uuid
+  
+  /// Category name - Implements the need for clear topical organization (UI and core features).
+  ///
+  /// Stores the display name for the category. Ensures normalization by storing only atomic values; for example, 'Politics'. Must be unique.
+  name String
+  
+  /// Category description - Implements the need to explain what topics belong here (UI and business rules).
+  ///
+  /// Stores a plain text description, helping users understand the scope of this category. For example, 'Discuss news and analysis related to current economic policy.' This is normalized: no calculated fields, just a single atomic description.
+  description String?
+  
+  /// Creation timestamp - Implements the requirement for auditing and possible moderation actions.
+  ///
+  /// Marks the date/time this category was created, supporting tracking and history. Fully normalized and atomic by nature.
+  created_at DateTime @db.Timestamptz
+  
+  /// Last modification timestamp - Implements auditing and moderation requirements.
+  ///
+  /// Tracks when the category was last updated. Fully normalized and atomic; useful for moderators and admins to see recent changes.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft deletion timestamp - Implements the requirement to retain evidence for audit trail (business rules, content moderation).
+  ///
+  /// If not null, the category is considered removed but retained for historical integrity.  Fully normalized and supports audit processes. For example, if a category is retired, its deleted_at is set, not a physical delete.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  threads threads[]
+  
+  @@unique([name])
+  @@index([created_at])
+}
+
+/// Tags - Implements the requirement for users and moderators to add searchable, filterable labels to threads (search and filtering section, core features).
+///
+/// Helps categorize and facilitate discovery of threads by specific subtopics (e.g. 'Inflation', 'Election 2024'). Fully normalized: each tag is uniquely defined, atomic, and referenced by threads through a junction table. For example, a tag 'Policy' will be used on many threads.
+///
+/// Key relationships: thread_tags for M:N mapping from threads to tags. No duplication; all atomic, normalized fields.
+/// Special behaviors: Only unique tags allowed.
+///
+/// @namespace CategoriesTags
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model tags {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for the tag.
+  id String @id @db.Uuid
+  
+  /// Tag name - Implements the search/filter attribute for threads (search & filtering requirement).
+  ///
+  /// Atomic label for a tag, e.g., 'Inflation'. Ensures 3NF: only atomic names, uniqueness enforced, used for searching/filtering.
+  name String
+  
+  /// Creation timestamp - Implements tracking and moderation requirements for new tags.
+  ///
+  /// Marks when the tag was created (for audit or moderation). Normalized, atomic, and non-duplicative.
+  created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  thread_tags thread_tags[]
+  
+  @@unique([name])
+  @@index([created_at])
+}
+
+/// Thread Tags - Implements the requirement for a many-to-many relationship between threads and tags, organizing label application for search and filtering, as specified in core features.
+///
+/// Resolves the M:N cardinality between threads and tags in normalized 3NF form: each assignment is a unique pair (no duplication, all atomic). This enables tagging any thread with any tag without redundancy at source data. For example, the thread 'Election Impact' can have both the 'Elections' and 'Economy' tags applied through separate records here. 
+///
+/// Key relationships: Foreign keys to both threads (not present in this file, but referenced in full schema) and tags. No duplicates (unique constraint).
+///
+/// @namespace CategoriesTags
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model thread_tags {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for the thread-tag pair.
+  id String @id @db.Uuid
+  
+  /// Associated thread - Foreign key to threads.id.
+  ///
+  /// Implements assigning this tag to a specific thread. Enforces normalization and referential integrity by only storing atomic thread references. Required (not nullable), many-to-one from thread_tags to threads. Ensures each assignment is explicit.
+  thread_id String @db.Uuid
+  
+  /// Associated tag - Foreign key to tags.id. 
+  ///
+  /// Connects the thread-tag assignment to a specific tag. Enforces normalization and referential integrity by only storing atomic tag references. Required (not nullable), many-to-one from thread_tags to tags. Ensures correct, explicit assignment of tags.
+  tag_id String @db.Uuid
+  
+  /// Assignment creation timestamp - Auditing when this tag was applied to the thread (business rules).
+  ///
+  /// Normalized, atomic field for history tracking/audit.
+  created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  thread threads @relation(fields: [thread_id], references: [id], onDelete: Cascade)
+  tag tags @relation(fields: [tag_id], references: [id], onDelete: Cascade)
+  
+  @@unique([thread_id, tag_id])
+  @@index([tag_id])
+}

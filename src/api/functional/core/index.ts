@@ -1,3 +1,5 @@
 export * as users from "./users";
-export * as userRoles from "./userRoles";
-export * as categories from "./categories";
+export * as userProfiles from "./userProfiles";
+export * as roles from "./roles";
+export * as roleAssignments from "./roleAssignments";
+export * as organizations from "./organizations";

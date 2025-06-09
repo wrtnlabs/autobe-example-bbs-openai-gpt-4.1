@@ -1,0 +1,269 @@
+/// [Moderation Action Logging] - This implements content moderation workflow auditability from the requirements document (see 06_content_moderation_and_rules.md and 07_basic_business_rules.md). 
+///
+/// Logs every moderation action (such as content removals, warnings, suspensions, and bans) with timestamp, involved moderator, user, reason, and affected entity. Maintains full 3NF normalization by separating each action as an atomic event. For example, every time a moderator removes a post or suspends a user, a record is created here for transparency.
+///
+/// Key relationships: references the user who took the action, the affected user (if applicable), and optionally the post or comment.
+/// Special behaviors: never deleted; always append-only; provides audit trail for admins' review.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model moderation_logs {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for each moderation log entry.
+  id String @id @db.Uuid
+  
+  /// Moderator's {@link users.id} who performed this action. Implements action traceability per moderation rules.
+  moderator_id String @db.Uuid
+  
+  /// Target user's {@link users.id} affected by this action (e.g., warned, suspended). Nullable if not applicable (e.g., content-only actions).
+  target_user_id String? @db.Uuid
+  
+  /// Related post's {@link posts.id} if the moderation concerns a post. Nullable for user-only actions.
+  post_id String? @db.Uuid
+  
+  /// Related comment's {@link comments.id} if the moderation concerns a comment. Nullable for user-only or post-only actions.
+  comment_id String? @db.Uuid
+  
+  /// [Action type] - Implements requirement for detailed moderation workflow logging. Indicates type (removal, warning, suspension, ban, reinstatement, etc). Ensures normalization by representing as atomic type string. Example: 'post_removal', 'user_warned'.
+  action_type String
+  
+  /// [Moderator's rationale] - Documents reason for moderation, implements transparency requirement. Ensures each instance is justified atomically. Example: 'Hate speech', 'Off-topic'.
+  reason String
+  
+  /// [Moderation action time] - Date and time of moderation. Implements auditability and immutability. Example: '2024-05-10T13:22'.
+  created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  moderator users @relation("moderation_logs_of_moderator_id", fields: [moderator_id], references: [id], onDelete: Cascade)
+  target_user users? @relation("moderation_logs_of_target_user_id", fields: [target_user_id], references: [id], onDelete: Cascade)
+  post posts? @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  comment comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  
+  notifications notifications[]
+  
+  @@index([post_id])
+  @@index([comment_id])
+  
+  @@index([moderator_id, created_at])
+  @@index([target_user_id, created_at])
+}
+
+/// [Post Reporting] - Implements user-driven content flagging (see 04_core_features.md, 06_content_moderation_and_rules.md, and 07_basic_business_rules.md). 
+///
+/// Logs when any user flags (reports) a post for moderator review, in support of community self-moderation. Each report is individually stored for full 3NF normalization, allowing one post to be reported multiple times by multiple users for different reasons. For example, three users flag a post as spam—each gets their own report record.
+///
+/// Key relationships: references the reporting user and the reported post.
+/// Special behaviors: report status updated as moderators review/resolve.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model post_reports {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for each report.
+  id String @id @db.Uuid
+  
+  /// User's {@link users.id} who created this report. Implements report traceability.
+  reporter_id String @db.Uuid
+  
+  /// Reported post's {@link posts.id}. Implements requirement to link report atomically to the post.
+  post_id String @db.Uuid
+  
+  /// [Report reason] - Implements report requirement for capturing reporter's rationale (spam, harassment, off-topic, etc). Enforces atomic 3NF storage. Example: 'Spam'.
+  reason String
+  
+  /// [Moderation status] - Indicates current status (pending, resolved, dismissed). Required for handling workflow and audit. Example: 'pending'.
+  status String
+  
+  /// [Report created timestamp] - Time of report creation. Ensures audit trail. For example: '2024-05-10T15:05'.
+  created_at DateTime @db.Timestamptz
+  
+  /// [Report resolution timestamp] - Set when moderator addresses report. Nullable for open cases. Maintains 3NF by storing only atomic values. Example: '2024-05-11T08:33'.
+  resolved_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  reporter users @relation(fields: [reporter_id], references: [id], onDelete: Cascade)
+  post posts @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  
+  @@index([post_id, created_at])
+  @@index([reporter_id, created_at])
+}
+
+/// [Comment Reporting] - User report of comments for moderation (requirements: 04_core_features.md, 06_content_moderation_and_rules.md, 07_basic_business_rules.md).
+///
+/// Represents each individual user report of a comment, allowing many users to independently report the same comment. Maintains strict 3NF by ensuring each report is an atomic fact, never aggregated in regular tables. For example, if five users all flag a comment as inappropriate, five rows are created.
+///
+/// Key relationships: references reporting user and reported comment. Used by moderation dashboard and workflow.
+/// Special behaviors: supports status tracking for moderation progress.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model comment_reports {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique ID for each comment report.
+  id String @id @db.Uuid
+  
+  /// User's {@link users.id} who is reporting the comment. Implements the atomic, normalized user-report relationship.
+  reporter_id String @db.Uuid
+  
+  /// Reported comment's {@link comments.id}. Fulfills normalization: per-comment, per-user.
+  comment_id String @db.Uuid
+  
+  /// [Report reason] - Captures reporter's rationale (e.g. spam, incivility, off-topic). Maintains atomic fact in normalized schema. Example: 'Personal attack'.
+  reason String
+  
+  /// [Moderation status] - Indicates workflow position (pending, resolved, dismissed). Required per business rule for status tracking. Example: 'pending'.
+  status String
+  
+  /// [Report creation time] - Timestamp for when report is made. Example: '2024-05-12T11:00'
+  created_at DateTime @db.Timestamptz
+  
+  /// [Report resolution time] - When a moderator resolves this case. Nullable if not yet resolved. Maintains normalization by allowing null.
+  resolved_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  reporter users @relation(fields: [reporter_id], references: [id], onDelete: Cascade)
+  comment comments @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  
+  @@index([comment_id, created_at])
+  @@index([reporter_id, created_at])
+}
+
+/// [User Warnings] - Implements escalation workflow (requirements 06_content_moderation_and_rules.md and 07_basic_business_rules.md).
+///
+/// Each warning is an atomic record of moderator-initiated warnings to users, satisfying transparency and auditability rules. Allows a user to be warned multiple times, each linked to an incident or report, strictly normalized to avoid duplicate info. For example, a user may receive multiple warnings over time, each representing a separate reason or event.
+///
+/// Key relationships: links to warned user and moderator; optionally related to a post or comment (if warning concerns them).
+/// Special behaviors: referenced when escalating to suspensions/bans, or for moderator review.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model user_warnings {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Warning entry identifier.
+  id String @id @db.Uuid
+  
+  /// Warned user's {@link users.id}. Implements normalized warning-event mapping.
+  user_id String @db.Uuid
+  
+  /// Moderator's {@link users.id} who issued the warning. Ensures accountability for each warning.
+  moderator_id String @db.Uuid
+  
+  /// Related post's {@link posts.id}. Nullable: warnings may be generic or for comment instead. Ensures strict normalization. Example: user warned for specific post.
+  post_id String? @db.Uuid
+  
+  /// Related comment's {@link comments.id}. Nullable for global/user-only warnings. Prevents duplication.
+  comment_id String? @db.Uuid
+  
+  /// [Warning reason] - Moderator rationale for the warning. Implements logging and audit rules. Example: 'Incivility in debate'.
+  reason String
+  
+  /// [Warning issue timestamp] - Date/time of warning. Ensures each warning is individually atomic. For example: '2024-05-13T17:51'.
+  created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  user users @relation("user_warnings_of_user_id", fields: [user_id], references: [id], onDelete: Cascade)
+  moderator users @relation("user_warnings_of_moderator_id", fields: [moderator_id], references: [id], onDelete: Cascade)
+  post posts? @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  comment comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  
+  @@index([post_id])
+  @@index([comment_id])
+  
+  @@index([user_id, created_at])
+  @@index([moderator_id, created_at])
+}
+
+/// [User Suspensions] - Implements temporary lockouts (see requirements: 06_content_moderation_and_rules.md, 07_basic_business_rules.md).
+///
+/// Represents every event where a user is temporarily suspended for rule violations. Strictly normalized, with each suspension an individual record. For example, if a user is suspended twice for different offenses, two rows exist. Used for time-bound access restriction and future enforcement decisions.
+///
+/// Key relationships: user being suspended, moderator enforcing the suspension. Suspension duration is captured as start and end timestamp.
+/// Special behaviors: upon expiration, user regains access automatically.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model suspensions {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Suspension event identifier.
+  id String @id @db.Uuid
+  
+  /// Suspended user's {@link users.id}. Implements 3NF by maintaining atomic mapping for each suspension event.
+  user_id String @db.Uuid
+  
+  /// Moderator's {@link users.id} issuing the suspension. Implements accountability and audit as required.
+  moderator_id String @db.Uuid
+  
+  /// [Suspension reason] - Documented rationale for suspension. Fully normalized, no aggregation. For example: 'Repeated hate speech'.
+  reason String
+  
+  /// [Start timestamp] - Suspension begin time. Normalized as atomic timestamp. Example: '2024-05-13T10:00'.
+  start_at DateTime @db.Timestamptz
+  
+  /// [End timestamp] - Scheduled suspension end. Allows multiple, time-bound suspensions per user. Example: '2024-05-17T10:00'.
+  end_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  user users @relation("suspensions_of_user_id", fields: [user_id], references: [id], onDelete: Cascade)
+  moderator users @relation("suspensions_of_moderator_id", fields: [moderator_id], references: [id], onDelete: Cascade)
+  
+  @@index([user_id, start_at])
+  @@index([moderator_id, start_at])
+}
+
+/// [User Permanent Bans] - Implements permanent user blocking (06_content_moderation_and_rules.md and 07_basic_business_rules.md).
+///
+/// Each record reflects an independently-actioned permanent ban of a user, ensuring strict 3NF normalization (never duplicate or composite info). Used whenever an admin or moderator issues a platform-wide ban on a user.
+///
+/// Key relationships: links user being banned and moderator/admin applying the ban. Used for site access enforcement, transparency, and appeals process auditing.
+/// Special behaviors: records timestamp and reason for appeal review and auditing. Ban can be reversed by new record (not field mutation).
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model bans {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique ban event identifier.
+  id String @id @db.Uuid
+  
+  /// Banned user's {@link users.id}. Implements linkage per normalized, 1:1 event schema. Enables history tracking.
+  user_id String @db.Uuid
+  
+  /// Moderator or admin's {@link users.id} who banned the user. Records accountability per audit requirements.
+  moderator_id String @db.Uuid
+  
+  /// [Ban reason] - Moderator/admin's rationale for ban. Ensures documented, normalized justification. Example: 'Severe harassment'.
+  reason String
+  
+  /// [Ban timestamp] - Time of ban event, stored as atomic fact as per normalization requirements. Example: '2024-05-09T19:20'.
+  created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  user users @relation("bans_of_user_id", fields: [user_id], references: [id], onDelete: Cascade)
+  moderator users @relation("bans_of_moderator_id", fields: [moderator_id], references: [id], onDelete: Cascade)
+  
+  @@unique([user_id])
+  @@index([moderator_id, created_at])
+}

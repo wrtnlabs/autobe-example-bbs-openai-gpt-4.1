@@ -1,12 +1,12 @@
 {
   "aggregate": {
-    "total": 292768,
+    "total": 1831983,
     "input": {
-      "total": 259730,
-      "cached": 13696
+      "total": 1710689,
+      "cached": 40576
     },
     "output": {
-      "total": 33038,
+      "total": 121294,
       "reasoning": 0,
       "accepted_prediction": 0,
       "rejected_prediction": 0
@@ -52,26 +52,26 @@
     }
   },
   "call": {
-    "total": 260076,
+    "total": 1757492,
     "input": {
-      "total": 231846,
-      "cached": 13696
+      "total": 1647007,
+      "cached": 40576
     },
     "output": {
-      "total": 28230,
+      "total": 110485,
       "reasoning": 0,
       "accepted_prediction": 0,
       "rejected_prediction": 0
     }
   },
   "describe": {
-    "total": 32692,
+    "total": 74491,
     "input": {
-      "total": 27884,
+      "total": 63682,
       "cached": 0
     },
     "output": {
-      "total": 4808,
+      "total": 10809,
       "reasoning": 0,
       "accepted_prediction": 0,
       "rejected_prediction": 0
