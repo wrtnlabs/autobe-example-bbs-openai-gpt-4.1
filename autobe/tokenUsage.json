@@ -1,13 +1,13 @@
 {
   "facade": {
     "aggregate": {
-      "total": 11034517,
+      "total": 11372281,
       "input": {
-        "total": 9718214,
-        "cached": 178944
+        "total": 10096435,
+        "cached": 290560
       },
       "output": {
-        "total": 1316303,
+        "total": 1275846,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
@@ -53,26 +53,26 @@
       }
     },
     "call": {
-      "total": 9319985,
+      "total": 9724996,
       "input": {
-        "total": 8578398,
-        "cached": 178944
+        "total": 9006496,
+        "cached": 290560
       },
       "output": {
-        "total": 741587,
+        "total": 718500,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
       }
     },
     "describe": {
-      "total": 1714532,
+      "total": 1647285,
       "input": {
-        "total": 1139816,
+        "total": 1089939,
         "cached": 0
       },
       "output": {
-        "total": 574716,
+        "total": 557346,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
@@ -81,13 +81,13 @@
   },
   "analyze": {
     "aggregate": {
-      "total": 159696,
+      "total": 289247,
       "input": {
-        "total": 144398,
-        "cached": 8960
+        "total": 255604,
+        "cached": 1792
       },
       "output": {
-        "total": 15298,
+        "total": 33643,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
@@ -133,26 +133,26 @@
       }
     },
     "call": {
-      "total": 139055,
+      "total": 250835,
       "input": {
-        "total": 132234,
-        "cached": 8960
+        "total": 229803,
+        "cached": 1792
       },
       "output": {
-        "total": 6821,
+        "total": 21032,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
       }
     },
     "describe": {
-      "total": 20641,
+      "total": 38412,
       "input": {
-        "total": 12164,
+        "total": 25801,
         "cached": 0
       },
       "output": {
-        "total": 8477,
+        "total": 12611,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
@@ -161,13 +161,13 @@
   },
   "prisma": {
     "aggregate": {
-      "total": 652894,
+      "total": 909250,
       "input": {
-        "total": 577111,
-        "cached": 33792
+        "total": 837191,
+        "cached": 0
       },
       "output": {
-        "total": 75783,
+        "total": 72059,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
@@ -213,26 +213,26 @@
       }
     },
     "call": {
-      "total": 580672,
+      "total": 841748,
       "input": {
-        "total": 516822,
-        "cached": 33792
+        "total": 780705,
+        "cached": 0
       },
       "output": {
-        "total": 63850,
+        "total": 61043,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
       }
     },
     "describe": {
-      "total": 72222,
+      "total": 67502,
       "input": {
-        "total": 60289,
+        "total": 56486,
         "cached": 0
       },
       "output": {
-        "total": 11933,
+        "total": 11016,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
@@ -241,13 +241,13 @@
   },
   "interface": {
     "aggregate": {
-      "total": 1803592,
+      "total": 1719492,
       "input": {
-        "total": 1687171,
-        "cached": 43776
+        "total": 1607782,
+        "cached": 0
       },
       "output": {
-        "total": 116421,
+        "total": 111710,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
@@ -293,26 +293,26 @@
       }
     },
     "call": {
-      "total": 1623561,
+      "total": 1537746,
       "input": {
-        "total": 1536271,
-        "cached": 43776
+        "total": 1456375,
+        "cached": 0
       },
       "output": {
-        "total": 87290,
+        "total": 81371,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
       }
     },
     "describe": {
-      "total": 180031,
+      "total": 181746,
       "input": {
-        "total": 150900,
+        "total": 151407,
         "cached": 0
       },
       "output": {
-        "total": 29131,
+        "total": 30339,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
@@ -321,13 +321,13 @@
   },
   "test": {
     "aggregate": {
-      "total": 8418335,
+      "total": 8454292,
       "input": {
-        "total": 7309534,
-        "cached": 92416
+        "total": 7395858,
+        "cached": 288768
       },
       "output": {
-        "total": 1108801,
+        "total": 1058434,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
@@ -373,26 +373,26 @@
       }
     },
     "call": {
-      "total": 6976697,
+      "total": 7094667,
       "input": {
-        "total": 6393071,
-        "cached": 92416
+        "total": 6539613,
+        "cached": 288768
       },
       "output": {
-        "total": 583626,
+        "total": 555054,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0
       }
     },
     "describe": {
-      "total": 1441638,
+      "total": 1359625,
       "input": {
-        "total": 916463,
+        "total": 856245,
         "cached": 0
       },
       "output": {
-        "total": 525175,
+        "total": 503380,
         "reasoning": 0,
         "accepted_prediction": 0,
         "rejected_prediction": 0

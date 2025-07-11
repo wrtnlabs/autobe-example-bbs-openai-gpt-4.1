@@ -1,0 +1,280 @@
+/// [Teacher Entity] - Implements the teacher role (02_attendance_user_roles.md 3.1, 3.4). Core info for faculty with attendance management privileges. Strict 3NF: atomic, normalized, all references via FKs, with audit and unique constraints for email, and TPT-style auth reference.
+///
+/// @namespace AttendanceCore
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_teacher {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary Key] - Unique teacher identifier. Used for all references/joins.
+  id String @id @db.Uuid
+  
+  /// [School Foreign Key] - Links to attendance_school. 3NF, required.
+  school_id String @db.Uuid
+  
+  /// [Auth Account FK] - 1:1 with attendance_auth_account. Role/account separation for security.
+  auth_account_id String @db.Uuid
+  
+  /// [Teacher Name] - Atomic, normalized. No derived values.
+  name String
+  
+  /// [Teacher Email] - Unique contact, atomic, not calculated.
+  email String
+  
+  /// [Phone] - Direct contact, fully normalized.
+  phone String
+  
+  /// [Created At] - Record creation timestamp for audit.
+  created_at DateTime @db.Timestamptz
+  
+  /// [Updated At] - Modification timestamp for audit.
+  updated_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  school attendance_school @relation(fields: [school_id], references: [id], onDelete: Cascade)
+  auth_account attendance_auth_account @relation(fields: [auth_account_id], references: [id], onDelete: Cascade)
+  
+  attendance_classroom attendance_classroom[]
+  attendance_attendance_record attendance_attendance_record[]
+  attendance_attendance_code attendance_attendance_code[]
+  attendance_notification attendance_notification[]
+  attendance_access_log attendance_access_log[]
+  attendance_audit_log attendance_audit_log[]
+  
+  @@unique([email])
+  @@unique([auth_account_id])
+  @@index([school_id, name])
+}
+
+/// [Student Entity] - Implements the normalized student role (02_attendance_user_roles.md 3.2). Only atomic fields and foreign keys. Never use derived or denormalized student statistics in this table.
+///
+/// @namespace AttendanceCore
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_student {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary Key] - Unique student identifier.
+  id String @id @db.Uuid
+  
+  /// [School Foreign Key] - Reference to attendance_school. Required, 3NF.
+  school_id String @db.Uuid
+  
+  /// [Classroom Foreign Key] - Student's assigned class. 3NF, required.
+  classroom_id String @db.Uuid
+  
+  /// [Parent Foreign Key] - Many students:one parent. Nullable for orphans/imports.
+  parent_id String? @db.Uuid
+  
+  /// [Auth Account FK] - 1:1 mapping to attendance_auth_account. No duplication.
+  auth_account_id String @db.Uuid
+  
+  /// [Student Name] - Atomic. Do not concatenate or calculate.
+  name String
+  
+  /// [Gender] - Normalized, atomic string field ("male"/"female").
+  gender String
+  
+  /// [Birthdate] - ISO datetime, atomic, not aggregated. For stats/age calc elsewhere.
+  birthdate DateTime @db.Timestamptz
+  
+  /// [Created At] - Student record timestamp for audits.
+  created_at DateTime @db.Timestamptz
+  
+  /// [Updated At] - Audit timestamp for record changes.
+  updated_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  school attendance_school @relation(fields: [school_id], references: [id], onDelete: Cascade)
+  classroom attendance_classroom @relation(fields: [classroom_id], references: [id], onDelete: Cascade)
+  parent attendance_parent? @relation(fields: [parent_id], references: [id], onDelete: Cascade)
+  auth_account attendance_auth_account @relation(fields: [auth_account_id], references: [id], onDelete: Cascade)
+  
+  attendance_attendance_record attendance_attendance_record[]
+  attendance_notification attendance_notification[]
+  attendance_notification_channel attendance_notification_channel[]
+  attendance_stats_student_summary attendance_stats_student_summary[]
+  attendance_stats_abnormal_log attendance_stats_abnormal_log[]
+  attendance_access_log attendance_access_log[]
+  attendance_audit_log attendance_audit_log[]
+  
+  @@index([classroom_id])
+  @@index([parent_id])
+  
+  @@unique([auth_account_id])
+  @@index([school_id, classroom_id])
+}
+
+/// [Parent Entity] - Implements the guardian/parent role (02_attendance_user_roles.md 3.3). All data atomic, no denormalization. Parent mapped to one or more students, with atomic contact and strict FK for login account.
+///
+/// @namespace AttendanceCore
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_parent {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary Key] - Parent/guardian identity, referenced by students.
+  id String @id @db.Uuid
+  
+  /// [Auth Account FK] - 1:1 parent authentication mapping.
+  auth_account_id String @db.Uuid
+  
+  /// [Parent Name] - Guardian full name, atomic.
+  name String
+  
+  /// [Email] - Unique, atomic for notifications.
+  email String
+  
+  /// [Phone] - Direct, atomic for alerts/SMS.
+  phone String
+  
+  /// [Created At] - Audit for addition/linkage.
+  created_at DateTime @db.Timestamptz
+  
+  /// [Updated At] - Info change audit.
+  updated_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  auth_account attendance_auth_account @relation(fields: [auth_account_id], references: [id], onDelete: Cascade)
+  
+  attendance_student attendance_student[]
+  attendance_notification_channel attendance_notification_channel[]
+  attendance_access_log attendance_access_log[]
+  attendance_audit_log attendance_audit_log[]
+  
+  @@unique([email])
+  @@unique([auth_account_id])
+  @@index([phone])
+}
+
+/// [Admin Entity] - Implements the administrator/official/inspector (02_attendance_user_roles.md 3.4/3.5). All info atomic/normalized. Reference to school is nullable to allow super-admins. Strict 1:1 login account linkage.
+///
+/// @namespace AttendanceCore
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_admin {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary Key] - Unique admin/official identifier.
+  id String @id @db.Uuid
+  
+  /// [School Foreign Key] - Admin's school/responsibility. Nullable for system/global admin.
+  school_id String? @db.Uuid
+  
+  /// [Auth Account FK] - 1:1 with attendance_auth_account. Required for audit integrity.
+  auth_account_id String @db.Uuid
+  
+  /// [Admin Name] - Atomic, for contact/logging.
+  name String
+  
+  /// [Admin Email] - For contact, atomic, not derived.
+  email String
+  
+  /// [Created At] - Audit for admin creation.
+  created_at DateTime @db.Timestamptz
+  
+  /// [Updated At] - Audit for admin changes.
+  updated_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  school attendance_school? @relation(fields: [school_id], references: [id], onDelete: Cascade)
+  auth_account attendance_auth_account @relation(fields: [auth_account_id], references: [id], onDelete: Cascade)
+  
+  attendance_stats_abnormal_log attendance_stats_abnormal_log[]
+  attendance_access_log attendance_access_log[]
+  attendance_audit_log attendance_audit_log[]
+  
+  @@index([school_id])
+  
+  @@unique([auth_account_id])
+}
+
+/// [School Entity] - Implements school/unit reference (design intro & anchor table). Atomic fields for school identification/address, used as FK for other entities. Never contains denormalized stats.
+///
+/// @namespace AttendanceCore
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_school {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary Key] - School identifier.
+  id String @id @db.Uuid
+  
+  /// [School Name] - Atomic, normalized for directory/search.
+  name String
+  
+  /// [School Address] - Complete address, atomic single field.
+  address String
+  
+  /// [Created At] - School record creation, audit only.
+  created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  attendance_teacher attendance_teacher[]
+  attendance_student attendance_student[]
+  attendance_admin attendance_admin[]
+  attendance_classroom attendance_classroom[]
+  attendance_stats_daily attendance_stats_daily[]
+  attendance_stats_classroom_summary attendance_stats_classroom_summary[]
+  
+  @@unique([name, address])
+}
+
+/// [Classroom Entity] - School/class grouping (anchor for rosters, stats). 3NF, atomic: no summary/calculation fields. Lead teacher required via FK for accountability.
+///
+/// @namespace AttendanceCore
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_classroom {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary Key] - Classroom identifier.
+  id String @id @db.Uuid
+  
+  /// [School Foreign Key] - 3NF, classroom's school owner.
+  school_id String @db.Uuid
+  
+  /// [Lead Teacher FK] - Responsible teacher. 3NF, required (not derived from class roster).
+  teacher_id String @db.Uuid
+  
+  /// [Classroom Name] - Label for class listing/selection, atomic.
+  name String
+  
+  /// [Grade Level] - Integer grade for grouping/stats. Normalized.
+  grade_level Int @db.Integer
+  
+  /// [Created At] - Classroom creation time.
+  created_at DateTime @db.Timestamptz
+  
+  /// [Updated At] - Record update time.
+  updated_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  school attendance_school @relation(fields: [school_id], references: [id], onDelete: Cascade)
+  teacher attendance_teacher @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  
+  attendance_student attendance_student[]
+  attendance_attendance_record attendance_attendance_record[]
+  attendance_attendance_code attendance_attendance_code[]
+  attendance_notification attendance_notification[]
+  attendance_stats_daily attendance_stats_daily[]
+  attendance_stats_student_summary attendance_stats_student_summary[]
+  attendance_stats_classroom_summary attendance_stats_classroom_summary[]
+  attendance_access_log attendance_access_log[]
+  attendance_audit_log attendance_audit_log[]
+  
+  @@unique([school_id, name])
+  @@index([teacher_id])
+}

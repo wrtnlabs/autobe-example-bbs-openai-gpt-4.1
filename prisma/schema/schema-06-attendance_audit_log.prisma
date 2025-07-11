@@ -1,0 +1,126 @@
+/// [System access logs] - This implements the system access/audit trail requirement from the compliance and security section (admin/authority monitoring, user action logging) in the attendance requirement analysis.
+///
+/// Records all user and admin access to the attendance system for security audit, compliance, and traceability. This table stores each access event with session/user/account/classroom reference, IP, device, agent, and timestamp. Maintains strict 3NF normalization by storing only atomic log facts.
+///
+/// For example, used to track every time an admin or teacher accesses a dashboard, or a parent/guardian checks attendance alerts. Used for internal compliance and for audits (e.g. police, educational authorities).
+///
+/// Key relationships: references user-type accounts, classroom (optional), and records detailed metadata of access events.
+/// Special behaviors: immutable row; never update/delete for auditability. May be large/requires archiving/partitioning for long-term retention.
+///
+/// @namespace AttendanceAuditLog
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_access_log {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary key] - Implements unique identification for each access event. All access log rows have a globally unique id for audit traceability. Always in the 'id' field for normalization and reference. For example, log line ID for reviewing access history.
+  id String @id @db.Uuid
+  
+  /// [Teacher reference] - Links access event to teacher role, if performed by a teacher. Null if not relevant. Normalizes who performed the access for auditing by role. For example, a teacher opening the class dashboard. Nullable: admin/parent access.
+  teacher_id String? @db.Uuid
+  
+  /// [Student reference] - Links access event to student, if performed by a student. Null if not relevant. Maintains normalization by only referencing, never duplicating user data. For example, a student checks their attendance log. Nullable: teacher/parent access.
+  student_id String? @db.Uuid
+  
+  /// [Parent reference] - Links access event to a parent, if performed by parent/guardian. Null if not relevant. Ensures normalization and distinct role link. For example, a parent viewing notification dashboard. Nullable except for parent access.
+  parent_id String? @db.Uuid
+  
+  /// [Admin reference] - If the access was by an admin/authority. Always normalized – records only UUID, never duplicated info. Null if not relevant. For example, an admin reviewing logs. Nullable for non-admin roles.
+  admin_id String? @db.Uuid
+  
+  /// [Classroom reference] - Optionally links this access to a classroom context if relevant (e.g., teacher opens a class dashboard). Null if not relevant. Maintains strict normalization – never duplicating classroom data, only referencing. For example, viewing attendance for a specific class.
+  classroom_id String? @db.Uuid
+  
+  /// [IP Address] - Captures remote IP address from which the user accessed the system. Implements regulatory and audit requirements for traceability by IP. For example, used in suspicious access investigations. Maintains normalization as atomic string. Non-null.
+  ip_address String
+  
+  /// [User Agent] - User's browser/device client agent string at access time. For device and environment forensics/audit. Maintains normalization by storing the agent string atomically. For example, 'Mozilla/5.0...'. Non-null.
+  user_agent String
+  
+  /// [Device ID or fingerprint] - Optionally, the device/fingerprint associated with this access action (if available). Implements device tracking/auditability. Maintains 3NF normalization by being an atomic string. Nullable: not all accesses have unique fingerprint.
+  device_id String?
+  
+  /// [Access timestamp] - The exact timestamp of the access event, in UTC. Implements requirement for access event ordering and full audit trace. Maintains normalization (atomic datetime, non-duplicated). For example, can sort by access time for investigations. Non-null.
+  accessed_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  teacher attendance_teacher? @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  student attendance_student? @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  parent attendance_parent? @relation(fields: [parent_id], references: [id], onDelete: Cascade)
+  admin attendance_admin? @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+  classroom attendance_classroom? @relation(fields: [classroom_id], references: [id], onDelete: Cascade)
+  
+  @@index([teacher_id, accessed_at])
+  @@index([student_id, accessed_at])
+  @@index([parent_id, accessed_at])
+  @@index([admin_id, accessed_at])
+  @@index([classroom_id, accessed_at])
+}
+
+/// [Critical action audit log] - Implements the requirement to keep a secure, normalized record of all key/sensitive actions (modifications, exports, setting changes, account modifications) as cited in admin/authority oversight in requirements.
+///
+/// Stores per-event audit logs of entity changes, policy updates, sensitive data accesses, major system exports, and more. Fully normalized (3NF); NO derived data or redundancy, all foreign keys reference atomic records (users, admin, affected classroom or record if relevant).
+///
+/// For example: an admin changes attendance policy, a teacher bulk-modifies attendance, an export/download of all attendance. Used for security, compliance, and incident response. NEVER stores pre-calculated or denormalized data.
+///
+/// Key relationships: referenced user/admin/parent/teacher (action performer), classroom (if applicable), and atomic log details.
+/// Special behaviors: append-only (never updated/deleted); used for legal and regulatory audits.
+///
+/// @namespace AttendanceAuditLog
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_audit_log {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary key] - Uniquely identifies every audit event. Implements atomic row identity for each action. For example, for referencing an audit trail or incident report. Non-null, strictly unique.
+  id String @id @db.Uuid
+  
+  /// [Teacher reference] - Actor if the action was performed by a teacher. Null otherwise. Maintains normalization, enables per-teacher audits (e.g., edits own students).
+  teacher_id String? @db.Uuid
+  
+  /// [Student reference] - Actor if the event was done by a student (e.g., requests own attendance edit). Nullable for other roles/actions. Normalization enforced.
+  student_id String? @db.Uuid
+  
+  /// [Parent reference] - Actor if audit event performed by parent/guardian (e.g., notification request/view). Nullable for other roles. Maintains 3NF.
+  parent_id String? @db.Uuid
+  
+  /// [Admin reference] - Used if the audit event was performed by admin/authority. Null for non-admin. Maintains normalized structure (FK linkage, role separation).
+  admin_id String? @db.Uuid
+  
+  /// [Classroom reference] - Links to classroom context if the event relates to a classroom (e.g., attendance export, bulk policy change). Nullable if not relevant. Normalization via FK only.
+  classroom_id String? @db.Uuid
+  
+  /// [Event type] - Describes the kind of action being audited: e.g. 'attendance_edit', 'policy_update', 'data_export', etc. Implements requirement for granular action logs. Fully normalized as atomic string, reinforced by documentation/examples but not enums (for extensibility). E.g.: 'policy_update', 'student_added', 'bulk_export'.
+  event_type String
+  
+  /// [Action details] - Atomic short/medium text description of the action performed. E.g., 'Updated attendance for 3B class 2025-07-09', or info about export/file path/policy json. Implements transparency and accountability requirement. Normalized (not JSON, not aggregate); if detailed object, store as reference elsewhere.
+  action_details String
+  
+  /// [Action result flag] - Indicates if the critical action completed successfully (true/false). Implements requirement to track failed attempts and all audit flows. Maintains normalization. For example, 'false' if export failed due to permission error.
+  success Boolean
+  
+  /// [Failure reason] - Supplies additional description or code for failure event IF (and only if) the action failed. Nullable for success, non-null if success==false. 3NF with atomic narrative for compliance. For example, 'Permission denied'. Null if not failed.
+  failed_reason String?
+  
+  /// [Audit event timestamp] - Exact UTC datetime event was logged. Implements requirement for chronological forensic trail of critical actions. Maintains normalization; for example, used in timeline incident investigations.
+  audited_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  teacher attendance_teacher? @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  student attendance_student? @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  parent attendance_parent? @relation(fields: [parent_id], references: [id], onDelete: Cascade)
+  admin attendance_admin? @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+  classroom attendance_classroom? @relation(fields: [classroom_id], references: [id], onDelete: Cascade)
+  
+  @@index([student_id])
+  @@index([classroom_id])
+  
+  @@index([admin_id, audited_at])
+  @@index([teacher_id, audited_at])
+  @@index([parent_id, audited_at])
+  @@index([event_type, audited_at])
+}

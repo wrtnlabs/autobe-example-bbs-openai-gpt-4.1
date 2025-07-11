@@ -1,58 +1,52 @@
 import { Module } from "@nestjs/common";
 
-import { DiscussionboardUsersController } from "./controllers/discussionBoard/users/DiscussionboardUsersController";
-import { DiscussionboardUserprofilesController } from "./controllers/discussionBoard/userProfiles/DiscussionboardUserprofilesController";
-import { DiscussionboardRoleassignmentsController } from "./controllers/discussionBoard/roleAssignments/DiscussionboardRoleassignmentsController";
-import { DiscussionboardAdminsController } from "./controllers/discussionBoard/admins/DiscussionboardAdminsController";
-import { DiscussionboardModeratorsController } from "./controllers/discussionBoard/moderators/DiscussionboardModeratorsController";
-import { DiscussionboardGuestsController } from "./controllers/discussionBoard/guests/DiscussionboardGuestsController";
-import { DiscussionboardForumcategoriesController } from "./controllers/discussionBoard/forumCategories/DiscussionboardForumcategoriesController";
-import { DiscussionboardForumsubcategoriesController } from "./controllers/discussionBoard/forumSubcategories/DiscussionboardForumsubcategoriesController";
-import { DiscussionboardThreadsController } from "./controllers/discussionBoard/threads/DiscussionboardThreadsController";
-import { DiscussionboardPostsController } from "./controllers/discussionBoard/posts/DiscussionboardPostsController";
-import { DiscussionboardThreadtagsController } from "./controllers/discussionBoard/threadTags/DiscussionboardThreadtagsController";
-import { DiscussionboardForumcategorysnapshotsController } from "./controllers/discussionBoard/forumCategorySnapshots/DiscussionboardForumcategorysnapshotsController";
-import { DiscussionboardForumsubcategorysnapshotsController } from "./controllers/discussionBoard/forumSubcategorySnapshots/DiscussionboardForumsubcategorysnapshotsController";
-import { DiscussionboardCommentsController } from "./controllers/discussionBoard/comments/DiscussionboardCommentsController";
-import { DiscussionboardCommentrepliesController } from "./controllers/discussionBoard/commentReplies/DiscussionboardCommentrepliesController";
-import { DiscussionboardPostvotesController } from "./controllers/discussionBoard/postVotes/DiscussionboardPostvotesController";
-import { DiscussionboardCommentvotesController } from "./controllers/discussionBoard/commentVotes/DiscussionboardCommentvotesController";
-import { DiscussionboardReportsController } from "./controllers/discussionBoard/reports/DiscussionboardReportsController";
-import { DiscussionboardModerationactionsController } from "./controllers/discussionBoard/moderationActions/DiscussionboardModerationactionsController";
-import { DiscussionboardWarningsController } from "./controllers/discussionBoard/warnings/DiscussionboardWarningsController";
-import { DiscussionboardUserbansController } from "./controllers/discussionBoard/userBans/DiscussionboardUserbansController";
-import { DiscussionboardNotificationsController } from "./controllers/discussionBoard/notifications/DiscussionboardNotificationsController";
-import { DiscussionboardUsersettingsController } from "./controllers/discussionBoard/userSettings/DiscussionboardUsersettingsController";
-import { DiscussionboardAttachmentsController } from "./controllers/discussionBoard/attachments/DiscussionboardAttachmentsController";
-import { DiscussionboardPostattachmentlinksController } from "./controllers/discussionBoard/postAttachmentLinks/DiscussionboardPostattachmentlinksController";
+import { AttendanceTeachersController } from "./controllers/attendance/teachers/AttendanceTeachersController";
+import { AttendanceStudentsController } from "./controllers/attendance/students/AttendanceStudentsController";
+import { AttendanceParentsController } from "./controllers/attendance/parents/AttendanceParentsController";
+import { AttendanceAdminsController } from "./controllers/attendance/admins/AttendanceAdminsController";
+import { AttendanceSchoolsController } from "./controllers/attendance/schools/AttendanceSchoolsController";
+import { AttendanceClassroomsController } from "./controllers/attendance/classrooms/AttendanceClassroomsController";
+import { AttendanceAuthAccountsController } from "./controllers/attendance/auth/accounts/AttendanceAuthAccountsController";
+import { AttendanceAuthSocialaccountsController } from "./controllers/attendance/auth/socialAccounts/AttendanceAuthSocialaccountsController";
+import { AttendanceAuthSessionsController } from "./controllers/attendance/auth/sessions/AttendanceAuthSessionsController";
+import { AttendanceAttendancerecordsController } from "./controllers/attendance/attendanceRecords/AttendanceAttendancerecordsController";
+import { AttendanceAttendancecodesController } from "./controllers/attendance/attendanceCodes/AttendanceAttendancecodesController";
+import { AttendanceAttendancecodelogsController } from "./controllers/attendance/attendanceCodeLogs/AttendanceAttendancecodelogsController";
+import { AttendanceAttendancemethodsController } from "./controllers/attendance/attendanceMethods/AttendanceAttendancemethodsController";
+import { AttendanceNotificationsController } from "./controllers/attendance/notifications/AttendanceNotificationsController";
+import { AttendanceNotificationchannelsController } from "./controllers/attendance/notificationChannels/AttendanceNotificationchannelsController";
+import { AttendanceNotificationhistoriesController } from "./controllers/attendance/notificationHistories/AttendanceNotificationhistoriesController";
+import { AttendanceStatsDailyController } from "./controllers/attendance/stats/daily/AttendanceStatsDailyController";
+import { AttendanceStatsStudentsummariesController } from "./controllers/attendance/stats/studentSummaries/AttendanceStatsStudentsummariesController";
+import { AttendanceStatsClassroomsummariesController } from "./controllers/attendance/stats/classroomSummaries/AttendanceStatsClassroomsummariesController";
+import { AttendanceStatsAbnormallogsController } from "./controllers/attendance/stats/abnormalLogs/AttendanceStatsAbnormallogsController";
+import { AttendanceAccesslogsController } from "./controllers/attendance/accessLogs/AttendanceAccesslogsController";
+import { AttendanceAuditlogsController } from "./controllers/attendance/auditLogs/AttendanceAuditlogsController";
 
 @Module({
   controllers: [
-    DiscussionboardUsersController,
-    DiscussionboardUserprofilesController,
-    DiscussionboardRoleassignmentsController,
-    DiscussionboardAdminsController,
-    DiscussionboardModeratorsController,
-    DiscussionboardGuestsController,
-    DiscussionboardForumcategoriesController,
-    DiscussionboardForumsubcategoriesController,
-    DiscussionboardThreadsController,
-    DiscussionboardPostsController,
-    DiscussionboardThreadtagsController,
-    DiscussionboardForumcategorysnapshotsController,
-    DiscussionboardForumsubcategorysnapshotsController,
-    DiscussionboardCommentsController,
-    DiscussionboardCommentrepliesController,
-    DiscussionboardPostvotesController,
-    DiscussionboardCommentvotesController,
-    DiscussionboardReportsController,
-    DiscussionboardModerationactionsController,
-    DiscussionboardWarningsController,
-    DiscussionboardUserbansController,
-    DiscussionboardNotificationsController,
-    DiscussionboardUsersettingsController,
-    DiscussionboardAttachmentsController,
-    DiscussionboardPostattachmentlinksController,
+    AttendanceTeachersController,
+    AttendanceStudentsController,
+    AttendanceParentsController,
+    AttendanceAdminsController,
+    AttendanceSchoolsController,
+    AttendanceClassroomsController,
+    AttendanceAuthAccountsController,
+    AttendanceAuthSocialaccountsController,
+    AttendanceAuthSessionsController,
+    AttendanceAttendancerecordsController,
+    AttendanceAttendancecodesController,
+    AttendanceAttendancecodelogsController,
+    AttendanceAttendancemethodsController,
+    AttendanceNotificationsController,
+    AttendanceNotificationchannelsController,
+    AttendanceNotificationhistoriesController,
+    AttendanceStatsDailyController,
+    AttendanceStatsStudentsummariesController,
+    AttendanceStatsClassroomsummariesController,
+    AttendanceStatsAbnormallogsController,
+    AttendanceAccesslogsController,
+    AttendanceAuditlogsController,
   ],
 })
 export class MyModule {}

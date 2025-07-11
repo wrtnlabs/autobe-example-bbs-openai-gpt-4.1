@@ -1,71 +1,72 @@
 {
   "files": [
     {
-      "filename": "schema-01-core_discussion_board.prisma",
-      "namespace": "CoreDiscussionBoard",
+      "filename": "schema-01-attendance_core.prisma",
+      "namespace": "AttendanceCore",
       "models": [
         {
-          "name": "discussion_board_user",
-          "description": "[User Core Record] - This implements the 'User Registration and Login' and 'User Roles & Permissions' requirements from the requirements analysis document.\n\nThis model represents the base registered user of the discussion board. It stores the essential authentication and identification information required for account-based access to discussion board features, and forms the foundation for linking to user profiles, role assignments, and actions. Maintains 3NF by separating core user identity from profile data, roles, and activity logs. For example, use this model to register, log in, and associate subsequent profile and permissions data.\n\nKey relationships: One-to-one with discussion_board_user_profile; one-to-many with discussion_board_role_assignment, discussion_board_notification; one-to-many with posts, comments, reports, votes, and moderation actions via foreign keys.\nSpecial behaviors: Email is unique per user; soft delete is supported with 'deleted_at'.",
+          "name": "attendance_teacher",
+          "description": "[Teacher Entity] - Implements the teacher role (02_attendance_user_roles.md 3.1, 3.4). Core info for faculty with attendance management privileges. Strict 3NF: atomic, normalized, all references via FKs, with audit and unique constraints for email, and TPT-style auth reference.",
           "material": false,
           "primaryField": {
             "name": "id",
             "type": "uuid",
-            "description": "[Primary Key] - Implements unique identification for each user. Guarantees user-level uniqueness and supports referential integrity for all relations. Required for all business operations that target a user entity.",
-            "isId": true,
-            "isRequired": true,
-            "dbType": "Uuid"
+            "description": "[Primary Key] - Unique teacher identifier. Used for all references/joins."
           },
-          "foreignFields": [],
+          "foreignFields": [
+            {
+              "name": "school_id",
+              "type": "uuid",
+              "description": "[School Foreign Key] - Links to attendance_school. 3NF, required.",
+              "nullable": false,
+              "unique": false,
+              "relation": {
+                "name": "school",
+                "targetModel": "attendance_school"
+              }
+            },
+            {
+              "name": "auth_account_id",
+              "type": "uuid",
+              "description": "[Auth Account FK] - 1:1 with attendance_auth_account. Role/account separation for security.",
+              "nullable": false,
+              "unique": true,
+              "relation": {
+                "name": "auth_account",
+                "targetModel": "attendance_auth_account"
+              }
+            }
+          ],
           "plainFields": [
             {
-              "name": "username",
+              "name": "name",
               "type": "string",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[Username] - Implements the username requirement for display and mentions.\nA unique, human-friendly identifier used for display and tagging within the board. Maintains normalization by being atomic and not reused across users. For example, '@policyDebater'. Must be unique (enforced below)."
+              "description": "[Teacher Name] - Atomic, normalized. No derived values.",
+              "nullable": false
             },
             {
               "name": "email",
               "type": "string",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[User Email] - For registration, authentication, and notifications. Implements the core user communication channel required by 'User Registration and Login.' Normalized atomic value. Enforced unique (see uniqueIndexes)."
+              "description": "[Teacher Email] - Unique contact, atomic, not calculated.",
+              "nullable": false
             },
             {
-              "name": "password_hash",
+              "name": "phone",
               "type": "string",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[Password Hash] - Securely stores the user's password in a one-way hashed format. Implements authentication requirement. Maintains normalization; no computed/derived data."
-            },
-            {
-              "name": "is_active",
-              "type": "boolean",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[Active Status] - Indicates whether the user's account is currently active. Used to implement onboarding, activation, or ban-flow business logic. Atomic boolean; supports role and moderation workflows."
+              "description": "[Phone] - Direct contact, fully normalized.",
+              "nullable": false
             },
             {
               "name": "created_at",
               "type": "datetime",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[Creation Timestamp] - Records when the user entity was created. Maintains full audit compliance and supports query for registration trends."
+              "description": "[Created At] - Record creation timestamp for audit.",
+              "nullable": false
             },
             {
               "name": "updated_at",
               "type": "datetime",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[Last Update Timestamp] - Tracks last profile/account update, enabling modification history and change tracking."
-            },
-            {
-              "name": "deleted_at",
-              "type": "datetime",
-              "isRequired": false,
-              "nullable": true,
-              "description": "[Soft Delete Timestamp] - Null unless the account is deleted. Implements reversible account deactivation for moderation and GDPR compliance."
+              "description": "[Updated At] - Modification timestamp for audit.",
+              "nullable": false
             }
           ],
           "uniqueIndexes": [
@@ -74,1801 +75,634 @@
                 "email"
               ],
               "unique": true,
-              "description": "Ensures user email addresses are globally unique for authentication and notifications."
+              "description": "Teacher email must be unique."
             },
             {
               "fieldNames": [
-                "username"
+                "auth_account_id"
               ],
               "unique": true,
-              "description": "Enforces unique user display and mention handles."
+              "description": "Strict 1:1 mapping to auth account."
             }
           ],
           "plainIndexes": [
             {
               "fieldNames": [
-                "created_at"
+                "school_id",
+                "name"
               ],
-              "description": "Supports queries by user registration date for reporting and trend analysis."
+              "description": "(Composite) Teacher list/query by school/name."
             }
           ],
           "ginIndexes": []
         },
         {
-          "name": "discussion_board_user_profile",
-          "description": "[User Profile] - Implements part of 'User Registration/Profile' and 'Customizable User Profiles.'\n\nContains customizable and optional profile data (display name, bio, profile pic URI) separate from core user credentials. Ensures normalized split between authentication and profile info (3NF), supports GDPR compliance. For example, updating profile image, displaying bio, showing user info in posts.\n\nKey relationships: One-to-one with discussion_board_user (user_id is unique), allows fast joins to user details.\nSpecial behaviors: user_id is unique; will cascade null on user delete where appropriate.",
+          "name": "attendance_student",
+          "description": "[Student Entity] - Implements the normalized student role (02_attendance_user_roles.md 3.2). Only atomic fields and foreign keys. Never use derived or denormalized student statistics in this table.",
           "material": false,
           "primaryField": {
             "name": "id",
             "type": "uuid",
-            "description": "[Primary Key] - Unique profile record for atomic, normalized user profile data. Referential integrity for profile-specific fields.",
-            "isId": true,
-            "isRequired": true,
-            "dbType": "Uuid"
+            "description": "[Primary Key] - Unique student identifier."
           },
           "foreignFields": [
             {
-              "name": "user_id",
+              "name": "school_id",
               "type": "uuid",
-              "isRequired": true,
+              "description": "[School Foreign Key] - Reference to attendance_school. Required, 3NF.",
               "nullable": false,
+              "unique": false,
               "relation": {
-                "name": "user",
-                "targetModel": "discussion_board_user"
-              },
+                "name": "school",
+                "targetModel": "attendance_school"
+              }
+            },
+            {
+              "name": "classroom_id",
+              "type": "uuid",
+              "description": "[Classroom Foreign Key] - Student's assigned class. 3NF, required.",
+              "nullable": false,
+              "unique": false,
+              "relation": {
+                "name": "classroom",
+                "targetModel": "attendance_classroom"
+              }
+            },
+            {
+              "name": "parent_id",
+              "type": "uuid",
+              "description": "[Parent Foreign Key] - Many students:one parent. Nullable for orphans/imports.",
+              "nullable": true,
+              "unique": false,
+              "relation": {
+                "name": "parent",
+                "targetModel": "attendance_parent"
+              }
+            },
+            {
+              "name": "auth_account_id",
+              "type": "uuid",
+              "description": "[Auth Account FK] - 1:1 mapping to attendance_auth_account. No duplication.",
+              "nullable": false,
               "unique": true,
-              "description": "[User FK] - References the core user entity for profile linkage. Maintains strict 1:1 mapping; cannot be null."
+              "relation": {
+                "name": "auth_account",
+                "targetModel": "attendance_auth_account"
+              }
             }
           ],
           "plainFields": [
             {
-              "name": "display_name",
+              "name": "name",
               "type": "string",
-              "isRequired": false,
-              "nullable": true,
-              "description": "[Display Name] - Optional user display alias, separate from username. Implements profile customization feature."
+              "description": "[Student Name] - Atomic. Do not concatenate or calculate.",
+              "nullable": false
             },
             {
-              "name": "bio",
+              "name": "gender",
               "type": "string",
-              "isRequired": false,
-              "nullable": true,
-              "description": "[User Bio] - Optional user biography for richer profile info. Normalized atomic field."
+              "description": "[Gender] - Normalized, atomic string field (\"male\"/\"female\").",
+              "nullable": false
             },
             {
-              "name": "profile_picture_uri",
-              "type": "uri",
-              "isRequired": false,
-              "nullable": true,
-              "description": "[Profile Picture URI] - Optional link to user's avatar/profile image. Supports external and internal URLs."
+              "name": "birthdate",
+              "type": "datetime",
+              "description": "[Birthdate] - ISO datetime, atomic, not aggregated. For stats/age calc elsewhere.",
+              "nullable": false
             },
             {
               "name": "created_at",
               "type": "datetime",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[Created] - When the profile was created. Enables history queries."
+              "description": "[Created At] - Student record timestamp for audits.",
+              "nullable": false
             },
             {
               "name": "updated_at",
               "type": "datetime",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[Updated] - Last profile update."
+              "description": "[Updated At] - Audit timestamp for record changes.",
+              "nullable": false
             }
           ],
           "uniqueIndexes": [
             {
               "fieldNames": [
-                "user_id"
+                "auth_account_id"
               ],
               "unique": true,
-              "description": "Guarantees each user has only one profile."
+              "description": "1:1 mapping to login record."
             }
           ],
           "plainIndexes": [
             {
               "fieldNames": [
-                "display_name"
+                "school_id",
+                "classroom_id"
               ],
-              "description": "Supports profile name search/fuzzy lookup for mentions."
-            }
-          ],
-          "ginIndexes": [
-            {
-              "fieldName": "bio",
-              "description": "Fuzzy search for user bios; supports community discovery."
-            }
-          ]
-        },
-        {
-          "name": "discussion_board_role_assignment",
-          "description": "[Role Assignment] - Implements 'User Roles & Permissions' and multi-role support.\n\nLinks users to their roles (member/moderator/admin/guest). Normalized to support multiple or historical role assignments per user, role revocation, start/end dates.\nMaintains 3NF by splitting user/role join logic out of user objects. For example, assigning 'Moderator' to a user, revoking privileges, or auditing user roles over time.\n\nKey relationships: Many-to-one with discussion_board_user; role_type ENUM differentiates role types; may associate with admin/moderator/guest tables for additional data.\nSpecial behaviors: No direct role fields on user; supports composite unique constraint for (user_id, role_type, assigned_at).",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "[Primary Key] - Unique identifier for each role assignment instance. Essential for audit trail and normalization.",
-            "isId": true,
-            "isRequired": true,
-            "dbType": "Uuid"
-          },
-          "foreignFields": [
-            {
-              "name": "user_id",
-              "type": "uuid",
-              "isRequired": true,
-              "nullable": false,
-              "relation": {
-                "name": "user",
-                "targetModel": "discussion_board_user"
-              },
-              "unique": false,
-              "description": "[User FK] - References the user who is assigned this role. Enables role tracking and permission checks."
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "role_type",
-              "type": "string",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[Role Type] - Implements which role (member/admin/moderator/guest) is assigned. ENUM-validated at app level; 3NF compliant."
-            },
-            {
-              "name": "assigned_at",
-              "type": "datetime",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[Assigned Timestamp] - When this role assignment began."
-            },
-            {
-              "name": "revoked_at",
-              "type": "datetime",
-              "isRequired": false,
-              "nullable": true,
-              "description": "[Revoked Timestamp] - If role was revoked, the time it ended. Null if active."
-            }
-          ],
-          "uniqueIndexes": [
-            {
-              "fieldNames": [
-                "user_id",
-                "role_type",
-                "assigned_at"
-              ],
-              "unique": true,
-              "description": "Enforces one active role assignment of a type per user at a given time."
-            }
-          ],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "role_type"
-              ],
-              "description": "Supports fast queries by role for moderation/admin panels."
+              "description": "Composite: optimize roster/queries by class/school."
             }
           ],
           "ginIndexes": []
         },
         {
-          "name": "discussion_board_admin",
-          "description": "[Admin Role Record] - Implements 'Admin' from 'User Roles & Permissions' for escalated platform control.\n\nThis table supports storing escalated admin metadata for users with admin-level privileges. Strictly separated from core user data for 3NF, containing only admin-relevant metadata (e.g., elevation reasons, assignment notes). For example, maintain dates for admin role assignment, internal comments for accountability.\n\nKey relationships: Many-to-one with discussion_board_user; join to role assignments for correspondence.\nSpecial behaviors: Only users with an active 'admin' role in discussion_board_role_assignment should have a record here. Admin status should be revoked in both this table and in role_assignment.",
+          "name": "attendance_parent",
+          "description": "[Parent Entity] - Implements the guardian/parent role (02_attendance_user_roles.md 3.3). All data atomic, no denormalization. Parent mapped to one or more students, with atomic contact and strict FK for login account.",
           "material": false,
           "primaryField": {
             "name": "id",
             "type": "uuid",
-            "description": "[Primary Key] - Unique identifier for each admin metadata record. Atomic ID for 3NF structure.",
-            "isId": true,
-            "isRequired": true,
-            "dbType": "Uuid"
+            "description": "[Primary Key] - Parent/guardian identity, referenced by students."
           },
           "foreignFields": [
             {
-              "name": "user_id",
+              "name": "auth_account_id",
               "type": "uuid",
-              "isRequired": true,
+              "description": "[Auth Account FK] - 1:1 parent authentication mapping.",
               "nullable": false,
-              "relation": {
-                "name": "user",
-                "targetModel": "discussion_board_user"
-              },
               "unique": true,
-              "description": "[Admin User FK] - The user who is an admin. Restricted to 1:1 mapping with user."
+              "relation": {
+                "name": "auth_account",
+                "targetModel": "attendance_auth_account"
+              }
             }
           ],
           "plainFields": [
             {
-              "name": "elevation_reason",
+              "name": "name",
               "type": "string",
-              "isRequired": false,
-              "nullable": true,
-              "description": "[Elevation Reason] - Reason for admin assignment; supports audit trail and Justification Policy."
+              "description": "[Parent Name] - Guardian full name, atomic.",
+              "nullable": false
             },
             {
-              "name": "notes",
+              "name": "email",
               "type": "string",
-              "isRequired": false,
-              "nullable": true,
-              "description": "[Admin Notes] - Misc. admin-related notes, e.g., contact channels, policies."
+              "description": "[Email] - Unique, atomic for notifications.",
+              "nullable": false
             },
             {
-              "name": "assigned_at",
-              "type": "datetime",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[Elevation Date] - When admin permission was granted."
+              "name": "phone",
+              "type": "string",
+              "description": "[Phone] - Direct, atomic for alerts/SMS.",
+              "nullable": false
             },
             {
-              "name": "revoked_at",
+              "name": "created_at",
               "type": "datetime",
-              "isRequired": false,
-              "nullable": true,
-              "description": "[Revocation Date] - When admin permission ended; null if currently active."
+              "description": "[Created At] - Audit for addition/linkage.",
+              "nullable": false
+            },
+            {
+              "name": "updated_at",
+              "type": "datetime",
+              "description": "[Updated At] - Info change audit.",
+              "nullable": false
             }
           ],
           "uniqueIndexes": [
             {
               "fieldNames": [
-                "user_id"
+                "email"
               ],
               "unique": true,
-              "description": "Ensures a user can have at most one admin metadata record at a time."
+              "description": "Parent email must be unique."
+            },
+            {
+              "fieldNames": [
+                "auth_account_id"
+              ],
+              "unique": true,
+              "description": "One-to-one mapping to auth account."
+            }
+          ],
+          "plainIndexes": [
+            {
+              "fieldNames": [
+                "phone"
+              ],
+              "description": "Query optimization by phone."
+            }
+          ],
+          "ginIndexes": []
+        },
+        {
+          "name": "attendance_admin",
+          "description": "[Admin Entity] - Implements the administrator/official/inspector (02_attendance_user_roles.md 3.4/3.5). All info atomic/normalized. Reference to school is nullable to allow super-admins. Strict 1:1 login account linkage.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[Primary Key] - Unique admin/official identifier."
+          },
+          "foreignFields": [
+            {
+              "name": "school_id",
+              "type": "uuid",
+              "description": "[School Foreign Key] - Admin's school/responsibility. Nullable for system/global admin.",
+              "nullable": true,
+              "unique": false,
+              "relation": {
+                "name": "school",
+                "targetModel": "attendance_school"
+              }
+            },
+            {
+              "name": "auth_account_id",
+              "type": "uuid",
+              "description": "[Auth Account FK] - 1:1 with attendance_auth_account. Required for audit integrity.",
+              "nullable": false,
+              "unique": true,
+              "relation": {
+                "name": "auth_account",
+                "targetModel": "attendance_auth_account"
+              }
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "name",
+              "type": "string",
+              "description": "[Admin Name] - Atomic, for contact/logging.",
+              "nullable": false
+            },
+            {
+              "name": "email",
+              "type": "string",
+              "description": "[Admin Email] - For contact, atomic, not derived.",
+              "nullable": false
+            },
+            {
+              "name": "created_at",
+              "type": "datetime",
+              "description": "[Created At] - Audit for admin creation.",
+              "nullable": false
+            },
+            {
+              "name": "updated_at",
+              "type": "datetime",
+              "description": "[Updated At] - Audit for admin changes.",
+              "nullable": false
+            }
+          ],
+          "uniqueIndexes": [
+            {
+              "fieldNames": [
+                "auth_account_id"
+              ],
+              "unique": true,
+              "description": "Admin-account 1:1 mapping."
             }
           ],
           "plainIndexes": [],
           "ginIndexes": []
         },
         {
-          "name": "discussion_board_moderator",
-          "description": "[Moderator Role Record] - Implements 'Moderator' from 'User Roles & Permissions' for specialized content moderation privileges.\n\nHolds moderator-specific metadata for users, cleanly separated from core user and admin records (3NF). Contains moderator onboarding info, special notes, and change history. For example, shows who assigned moderator status, start/end moderation tenure, and relevant notes.\n\nKey relationships: One-to-one with discussion_board_user; cross-references role assignments.\nSpecial behaviors: Only users with active 'moderator' role in discussion_board_role_assignment may appear here.",
+          "name": "attendance_school",
+          "description": "[School Entity] - Implements school/unit reference (design intro & anchor table). Atomic fields for school identification/address, used as FK for other entities. Never contains denormalized stats.",
           "material": false,
           "primaryField": {
             "name": "id",
             "type": "uuid",
-            "description": "[Primary Key] - Unique record for moderator metadata. Required for atomic 3NF storage.",
-            "isId": true,
-            "isRequired": true,
-            "dbType": "Uuid"
+            "description": "[Primary Key] - School identifier."
           },
-          "foreignFields": [
-            {
-              "name": "user_id",
-              "type": "uuid",
-              "isRequired": true,
-              "nullable": false,
-              "relation": {
-                "name": "user",
-                "targetModel": "discussion_board_user"
-              },
-              "unique": true,
-              "description": "[Moderator User FK] - References the user with moderator permission (strict 1:1 mapping)."
-            }
-          ],
+          "foreignFields": [],
           "plainFields": [
             {
-              "name": "assigned_at",
-              "type": "datetime",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[Moderator Assignment Date] - Start of moderation privileges."
-            },
-            {
-              "name": "revoked_at",
-              "type": "datetime",
-              "isRequired": false,
-              "nullable": true,
-              "description": "[End Date] - Date/Time moderator status was revoked, if applicable."
-            },
-            {
-              "name": "notes",
+              "name": "name",
               "type": "string",
-              "isRequired": false,
-              "nullable": true,
-              "description": "[Moderator Notes] - Comments, onboarding reasons, or specialist qualifications."
+              "description": "[School Name] - Atomic, normalized for directory/search.",
+              "nullable": false
+            },
+            {
+              "name": "address",
+              "type": "string",
+              "description": "[School Address] - Complete address, atomic single field.",
+              "nullable": false
+            },
+            {
+              "name": "created_at",
+              "type": "datetime",
+              "description": "[Created At] - School record creation, audit only.",
+              "nullable": false
             }
           ],
           "uniqueIndexes": [
             {
               "fieldNames": [
-                "user_id"
+                "name",
+                "address"
               ],
               "unique": true,
-              "description": "Ensures one moderator metadata record per user."
+              "description": "No duplicate school/address pair."
             }
           ],
           "plainIndexes": [],
           "ginIndexes": []
         },
         {
-          "name": "discussion_board_guest",
-          "description": "[Guest Record] - Implements the 'Guest' (unregistered user) role as referenced in role documentation.\n\nRecords minimal info about unregistered (guest) users when tracking certain interactions or access history. Normalized (3NF) by only storing atomic guest identity data, not storing calculated fields or multiple info types.\n\nKey relationships: None typically mandatory, but can support analytic or audit features.\nSpecial behaviors: Does not link to user logins - guests never authenticate; never assigned to posts/comments directly.",
+          "name": "attendance_classroom",
+          "description": "[Classroom Entity] - School/class grouping (anchor for rosters, stats). 3NF, atomic: no summary/calculation fields. Lead teacher required via FK for accountability.",
           "material": false,
           "primaryField": {
             "name": "id",
             "type": "uuid",
-            "description": "[Primary Key] - Unique atomic identifier for guest record.",
-            "isId": true,
-            "isRequired": true,
-            "dbType": "Uuid"
-          },
-          "foreignFields": [],
-          "plainFields": [
-            {
-              "name": "session_token",
-              "type": "string",
-              "isRequired": false,
-              "nullable": true,
-              "description": "[Guest Session Token] - Optionally store a guest's browser/session key for basic tracking."
-            },
-            {
-              "name": "first_seen_at",
-              "type": "datetime",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[First Seen] - Timestamp when guest was first detected."
-            },
-            {
-              "name": "last_seen_at",
-              "type": "datetime",
-              "isRequired": true,
-              "nullable": false,
-              "description": "[Last Seen] - Most recent guest activity. Supports analytics/audit."
-            }
-          ],
-          "uniqueIndexes": [],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "first_seen_at"
-              ],
-              "description": "Supports guest activity analytics by time."
-            },
-            {
-              "fieldNames": [
-                "last_seen_at"
-              ],
-              "description": "Fast query for recent guest analysis."
-            }
-          ],
-          "ginIndexes": []
-        }
-      ]
-    },
-    {
-      "filename": "schema-02-forum_structure.prisma",
-      "namespace": "ForumStructure",
-      "models": [
-        {
-          "name": "discussion_board_forum_category",
-          "description": "Forum Categories - This implements the requirement for organizing the discussion board into major topics (see Requirements Analysis: 'Discussion Board Structure'). \n\nBusiness purpose: Provides high-level grouping for all threads, such as 'Global Politics' or 'National Economy', fostering content discoverability and topic-focused discussions. Maintains 3NF normalization by only storing atomic category data and not duplicating subcategory/thread details here. For example, 'Economics' or 'International Relations' as discrete categories.\n\nKey relationships: References subcategories and, indirectly, threads via subcategories.\nSpecial behaviors: Unique category name enforced, cannot be deleted if any subcategories exist.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "Primary key for the forum category - Implements unique identification for each category. Guarantees entity uniqueness and referential integrity."
-          },
-          "foreignFields": [],
-          "plainFields": [
-            {
-              "name": "name",
-              "type": "string",
-              "description": "Category name - Implements naming requirement for clear topic organization. Business meaning: the display name of the forum category (e.g., 'International Politics'). Ensures normalization by preventing redundancy; this is not duplicated elsewhere. Example usage: navigation menus, filters. Unique constraint applies.",
-              "nullable": false
-            },
-            {
-              "name": "description",
-              "type": "string",
-              "description": "Category description - Implements display and discoverability requirements. Business meaning: short summary shown on category landing pages. Keeps all descriptive text atomic per category. Example: 'Discussions about international political events.'",
-              "nullable": true
-            },
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "description": "Creation timestamp - Implements audit trail for when the category was created. Used for ordering or analytics, always atomic.",
-              "nullable": false
-            },
-            {
-              "name": "updated_at",
-              "type": "datetime",
-              "description": "Last update timestamp - Tracks when category details were modified. Supports history/audit without duplicating state elsewhere.",
-              "nullable": false
-            }
-          ],
-          "uniqueIndexes": [
-            {
-              "fieldNames": [
-                "name"
-              ],
-              "unique": true,
-              "description": "Unique constraint to prevent duplicate category names."
-            }
-          ],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "created_at"
-              ],
-              "description": "Index to optimize sorting/filtering categories by creation time."
-            }
-          ],
-          "ginIndexes": []
-        },
-        {
-          "name": "discussion_board_forum_subcategory",
-          "description": "Forum Subcategories - Implements the requirement for organizing forums into specific subtopics (see Requirements Analysis: 'Discussion Board Structure'). \n\nBusiness purpose: Allows finer content filtering within major topics, such as 'East Asian Affairs' under the 'Global Politics' category.\nMaintains 3NF normalization by storing atomic subcategory data and referencing parent category via foreign key.\n\nUsage example: Users browse 'US Economy' under parent 'National Economy'.\nKey relationships: Belongs to one category, has many threads.\nSpecial behaviors: Unique (category_id, name) constraint, deletion blocked if threads exist.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "Primary key for the forum subcategory - Uniquely identifies each subcategory. Supports relational integrity with threads and categories.",
-            "id": true,
-            "dbType": "uuid"
+            "description": "[Primary Key] - Classroom identifier."
           },
           "foreignFields": [
             {
-              "name": "forum_category_id",
+              "name": "school_id",
               "type": "uuid",
-              "description": "Foreign key to parent discussion_board_forum_category - Models subcategory-to-category relationship (M:1). Enforces subcategories always belong to a category. Reference integrity required.",
-              "relation": {
-                "targetModel": "discussion_board_forum_category",
-                "name": "forum_category",
-                "unique": false
-              },
-              "unique": false,
-              "nullable": false
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "name",
-              "type": "string",
-              "description": "Subcategory name - Atomic label for filtering and display. Example: 'Fiscal Policy'.",
-              "nullable": false
-            },
-            {
-              "name": "description",
-              "type": "string",
-              "description": "Subcategory description for UI and search. Atomic, optional. Example: 'Discussions on government spending.'",
-              "nullable": true
-            },
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "description": "Timestamp of subcategory creation for audit and display.",
-              "nullable": false
-            },
-            {
-              "name": "updated_at",
-              "type": "datetime",
-              "description": "Timestamp of last updates for the subcategory.",
-              "nullable": false
-            }
-          ],
-          "uniqueIndexes": [
-            {
-              "fieldNames": [
-                "forum_category_id",
-                "name"
-              ],
-              "unique": true,
-              "description": "Ensures unique subcategory names per category."
-            }
-          ],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "forum_category_id"
-              ],
-              "description": "Composite index for filtering subcategories by parent category."
-            }
-          ],
-          "ginIndexes": [
-            {
-              "fieldName": "name",
-              "description": "GIN index for searching subcategory names."
-            }
-          ]
-        },
-        {
-          "name": "discussion_board_thread",
-          "description": "Discussion Threads - This implements the requirement for organizing conversations within subcategories (Requirements Analysis: 'Discussion Board Structure', 'Posting and Replies').\n\nBusiness purpose: Stores the root entity for discussion chains. Maintains 3NF by keeping thread-specific atomic data and relating to subcategory and author.\n\nUsage: 'Are tariffs helping?' thread in 'Trade Policy'.\nKey relationships: Belongs to a subcategory; has many posts and participants.\nSpecial behaviors: Title must be unique within subcategory, author cannot be null, soft delete by nullable deleted_at.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "Thread primary key - Unique identity for conversations. Prevents duplication and supports referencing in posts, tags, notifications.",
-            "id": true,
-            "dbType": "uuid"
-          },
-          "foreignFields": [
-            {
-              "name": "forum_subcategory_id",
-              "type": "uuid",
-              "description": "Foreign key to parent subcategory - Implements parent-child relationship, enforcing thread grouping. Required.",
-              "relation": {
-                "targetModel": "discussion_board_forum_subcategory",
-                "name": "forum_subcategory",
-                "unique": false
-              },
-              "unique": false,
-              "nullable": false
-            },
-            {
-              "name": "author_id",
-              "type": "uuid",
-              "description": "FK to user who created the thread (discussion_board_user) - Ensures each thread has an author; supports audit trail and permissions.",
-              "relation": {
-                "targetModel": "discussion_board_user",
-                "name": "author",
-                "unique": false
-              },
-              "unique": false,
-              "nullable": false
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "title",
-              "type": "string",
-              "description": "Thread title - Implements clear navigation and search features. Must be atomic; no calculated summaries. Example: 'What drives inflation?'.",
-              "nullable": false
-            },
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "description": "Thread creation timestamp - For sorting and audit, atomic per thread.",
-              "nullable": false
-            },
-            {
-              "name": "updated_at",
-              "type": "datetime",
-              "description": "Last edited timestamp.",
-              "nullable": false
-            },
-            {
-              "name": "deleted_at",
-              "type": "datetime",
-              "description": "Soft delete timestamp - Nullable. If set, thread is hidden but retained for potential recovery and moderation review.",
-              "nullable": true
-            }
-          ],
-          "uniqueIndexes": [
-            {
-              "fieldNames": [
-                "forum_subcategory_id",
-                "title"
-              ],
-              "unique": true,
-              "description": "Title uniqueness per subcategory, preventing confusion/duplication."
-            }
-          ],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "author_id",
-                "created_at"
-              ],
-              "description": "Common pattern for listing threads by user or recency."
-            }
-          ],
-          "ginIndexes": [
-            {
-              "fieldName": "title",
-              "description": "GIN/trigram for fast thread-title search and fuzzy matching."
-            }
-          ]
-        },
-        {
-          "name": "discussion_board_post",
-          "description": "Posts (Thread Starters and Replies) - Implements Requirements Analysis 'Posting and Replies', supporting new topics and detailed contributions.\n\nBusiness purpose: The core content unit, either as thread starter (original post) or reply to an existing thread. Maintains normalization: each post contains only atomic content data, references the thread and its author, and optionally a parent_post for hierarchical replies (threaded discussions). No summary/aggregates are stored here—must use a materialized view for those.\n\nUsage: A detailed argument about tax policy, appearing as a reply in a thread.\nKey relationships: Each post belongs to a thread, is authored by a user, may reference a parent post.\nSpecial behaviors: Soft-deletion via deleted_at, supports threaded structure through parent_post_id (nullable).",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "Post primary key - Uniquely identifies this contribution in the board. Enables referential integrity with votes/comments/etc.",
-            "id": true,
-            "dbType": "uuid"
-          },
-          "foreignFields": [
-            {
-              "name": "thread_id",
-              "type": "uuid",
-              "description": "FK to discussion_board_thread - Each post bound to a particular discussion thread.",
-              "relation": {
-                "targetModel": "discussion_board_thread",
-                "name": "thread",
-                "unique": false
-              },
-              "unique": false,
-              "nullable": false
-            },
-            {
-              "name": "author_id",
-              "type": "uuid",
-              "description": "FK to discussion_board_user - User who wrote the post.",
-              "relation": {
-                "targetModel": "discussion_board_user",
-                "name": "author",
-                "unique": false
-              },
-              "unique": false,
-              "nullable": false
-            },
-            {
-              "name": "parent_post_id",
-              "type": "uuid",
-              "description": "Self-referential FK for threaded replies - Optional; allows hierarchical reply trees.",
-              "relation": {
-                "targetModel": "discussion_board_post",
-                "name": "parent_post",
-                "unique": false
-              },
-              "unique": false,
-              "nullable": true
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "content",
-              "type": "string",
-              "description": "Post content body - Implements the full rich text for the user's contribution. Atomic, not summarized, not calculated. E.g., original submission or reply.",
-              "nullable": false
-            },
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "description": "Post creation time - Supports audit and display ordering.",
-              "nullable": false
-            },
-            {
-              "name": "updated_at",
-              "type": "datetime",
-              "description": "Last modification timestamp.",
-              "nullable": false
-            },
-            {
-              "name": "deleted_at",
-              "type": "datetime",
-              "description": "Soft delete timestamp for moderation; nullable.",
-              "nullable": true
-            }
-          ],
-          "uniqueIndexes": [],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "thread_id",
-                "created_at"
-              ],
-              "description": "Optimize querying all posts in a thread, sorted by recency."
-            },
-            {
-              "fieldNames": [
-                "author_id",
-                "created_at"
-              ],
-              "description": "Enable efficient retrieval of a user's activity timeline."
-            }
-          ],
-          "ginIndexes": [
-            {
-              "fieldName": "content",
-              "description": "Fuzzy search and discovery in post text (trigram GIN)."
-            }
-          ]
-        },
-        {
-          "name": "discussion_board_thread_tag",
-          "description": "Thread Tags - Implements Requirements Analysis ('Tagging & Categorization') for improved topic filtering and discoverability.\n\nBusiness purpose: Stores atomic tag labels and enables M:N assignment of tags to threads through a separate junction table (not defined here). 3NF compliance maintained—tags have no computed relations.\n\nUsage: Tags like 'elections', 'macroeconomics'.\nKey relationships: Used in thread_tag assignment (via a junction table), displayable in tag filters.\nSpecial behaviors: Unique tag name enforced, deleted_at for soft-removal. No denormalized fields.\n",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "Tag primary key - Ensures each tag is unique and can be safely assigned/reused."
-          },
-          "foreignFields": [],
-          "plainFields": [
-            {
-              "name": "name",
-              "type": "string",
-              "description": "Tag name - Human readable, atomic topic label. E.g., 'regulation'. Unique constraint.",
-              "nullable": false
-            },
-            {
-              "name": "description",
-              "type": "string",
-              "description": "Optional tag summary for tooltips/search. E.g., 'Threads about market regulations'.",
-              "nullable": true
-            },
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "description": "Tag creation time for sorting/audit.",
-              "nullable": false
-            },
-            {
-              "name": "updated_at",
-              "type": "datetime",
-              "description": "Last updated time to support tagging moderation or analytics.",
-              "nullable": false
-            },
-            {
-              "name": "deleted_at",
-              "type": "datetime",
-              "description": "Soft delete handling for archiving or moderation, not removal from historical context.",
-              "nullable": true
-            }
-          ],
-          "uniqueIndexes": [
-            {
-              "fieldNames": [
-                "name"
-              ],
-              "unique": true,
-              "description": "Ensures tag names are globally unique."
-            }
-          ],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "created_at"
-              ],
-              "description": "Allows tag order by creation date."
-            }
-          ],
-          "ginIndexes": []
-        },
-        {
-          "name": "discussion_board_forum_category_snapshot",
-          "description": "Forum Category Snapshots - Implements the snapshot pattern to preserve point-in-time historical states of forum categories (in support of audit trails and rollback features).\n\nBusiness Purpose: Allows the system to capture changes to categories (name, description, etc.) for compliance and moderation transparency (related to non-functional requirements: reliability, transparency, rollback capability). Maintains 3NF by not repeating posts/threads, only the atomic fields of the category.\nUsage: Auditing category renames, description changes. Rollback or investigation of moderation actions.\nKey Relationships: References the source category and user who made the change.\nSpecial Behaviors: Immutable; no update or delete except for legal compliance.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "Snapshot PK - Unique identifier for each historical state of a forum category.",
-            "id": true,
-            "dbType": "uuid"
-          },
-          "foreignFields": [
-            {
-              "name": "forum_category_id",
-              "type": "uuid",
-              "description": "FK to original forum category - Connects the snapshot to its source category.",
-              "relation": {
-                "targetModel": "discussion_board_forum_category",
-                "name": "forum_category",
-                "unique": false
-              },
-              "unique": false,
-              "nullable": false
-            },
-            {
-              "name": "created_by_id",
-              "type": "uuid",
-              "description": "FK to user who initiated this change (category mod/admin only).",
-              "relation": {
-                "targetModel": "discussion_board_user",
-                "name": "created_by",
-                "unique": false
-              },
-              "unique": false,
-              "nullable": false
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "name",
-              "type": "string",
-              "description": "Snapshot of the category name at change time.",
-              "nullable": false
-            },
-            {
-              "name": "description",
-              "type": "string",
-              "description": "Snapshot of the category description (may be null if not set).",
-              "nullable": true
-            },
-            {
-              "name": "snapshot_created_at",
-              "type": "datetime",
-              "description": "Timestamp the snapshot was recorded.",
-              "nullable": false
-            }
-          ],
-          "uniqueIndexes": [],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "forum_category_id",
-                "snapshot_created_at"
-              ],
-              "description": "Query historical states by category and date."
-            }
-          ],
-          "ginIndexes": []
-        },
-        {
-          "name": "discussion_board_forum_subcategory_snapshot",
-          "description": "Forum Subcategory Snapshots - Implements the snapshot/audit requirement for subcategory changes.\n\nBusiness Purpose: Captures versions of subcategories to track who, when, and how changes were made to subcategory metadata. Supports compliance and content moderation.\nNormalization: Only subcategory atomic fields captured.\nUsage: Revert or analyze updates to subcategory names, descriptions.\nKey Relationships: References source subcategory and the responsible user.\nSpecial Behaviors: Immutable after creation.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "Snapshot PK for forum subcategory versions.",
-            "id": true,
-            "dbType": "uuid"
-          },
-          "foreignFields": [
-            {
-              "name": "forum_subcategory_id",
-              "type": "uuid",
-              "description": "FK to subcategory the snapshot represents.",
-              "relation": {
-                "targetModel": "discussion_board_forum_subcategory",
-                "name": "forum_subcategory",
-                "unique": false
-              },
-              "unique": false,
-              "nullable": false
-            },
-            {
-              "name": "created_by_id",
-              "type": "uuid",
-              "description": "FK to user who initiated the subcategory update.",
-              "relation": {
-                "targetModel": "discussion_board_user",
-                "name": "created_by",
-                "unique": false
-              },
-              "unique": false,
-              "nullable": false
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "name",
-              "type": "string",
-              "description": "Snapshot of subcategory name.",
-              "nullable": false
-            },
-            {
-              "name": "description",
-              "type": "string",
-              "description": "Snapshot of subcategory description.",
-              "nullable": true
-            },
-            {
-              "name": "snapshot_created_at",
-              "type": "datetime",
-              "description": "When this snapshot was taken.",
-              "nullable": false
-            }
-          ],
-          "uniqueIndexes": [],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "forum_subcategory_id",
-                "snapshot_created_at"
-              ],
-              "description": "Query by subcategory and timeline."
-            }
-          ],
-          "ginIndexes": []
-        }
-      ]
-    },
-    {
-      "filename": "schema-03-commenting_and_votes.prisma",
-      "namespace": "CommentingAndVotes",
-      "models": [
-        {
-          "name": "discussion_board_comment",
-          "description": "[Comment Entity] - This implements the requirement for inline commenting and threaded discussions from the requirements analysis and feature list documents.\n\nThis model represents individual comments attached to discussion posts. It supports threaded/nested discussions when combined with 'discussion_board_comment_reply'. Maintains third normal form (3NF) compliance by only storing atomic, non-aggregated information relating to a single comment, such as author, post association, content, and timestamps. For example, used when a member leaves a comment on a thread post. \n\nKey relationships: References 'discussion_board_post' for the parent post and 'discussion_board_user' for the comment author. Special behaviors: Comments can be edited or deleted by their author or a moderator, and are subject to moderation rules.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "[Primary Key] - Implements unique identification for each comment.\n\nA unique, immutable identifier for the comment, stored as UUID. Supports data integrity and normalization by guaranteeing uniqueness for each comment."
-          },
-          "foreignFields": [
-            {
-              "name": "post_id",
-              "type": "uuid",
-              "model": "discussion_board_post",
-              "relation": {
-                "name": "post",
-                "model": "discussion_board_post",
-                "fields": [
-                  "post_id"
-                ],
-                "references": [
-                  "id"
-                ],
-                "targetModel": "discussion_board_post"
-              },
-              "unique": false,
-              "nullable": false,
-              "description": "[Post Foreign Key] - Links the comment to its parent post (thread), implementing the requirement for associating comments with the correct discussion.\n\nEnforces referential integrity to the 'discussion_board_post' model. Ensures normalization by not storing post details redundantly for each comment."
-            },
-            {
-              "name": "user_id",
-              "type": "uuid",
-              "model": "discussion_board_user",
-              "relation": {
-                "name": "user",
-                "model": "discussion_board_user",
-                "fields": [
-                  "user_id"
-                ],
-                "references": [
-                  "id"
-                ],
-                "targetModel": "discussion_board_user"
-              },
-              "unique": false,
-              "nullable": false,
-              "description": "[User Foreign Key] - References the author (member) that created the comment.\n\nSupports attribution and moderation. Enforces normalized storage of author info."
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "content",
-              "type": "string",
-              "nullable": false,
-              "description": "[Comment Content] - Implements storage for the body of the comment.\n\nStores atomic text data for the comment. Ensures normalization by keeping the comment body separate from user and post data. Example: 'I agree with your point on fiscal policy.'"
-            },
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "nullable": false,
-              "description": "[Creation Timestamp] - Captures when the comment was first published.\n\nRequired for audit trails and ordering comments. Enforces normalization as this atomic event relates only to the comment entity."
-            },
-            {
-              "name": "updated_at",
-              "type": "datetime",
-              "nullable": true,
-              "description": "[Update Timestamp] - Captures when the comment was last modified.\n\nSupports edit history per requirements. Null if never updated."
-            },
-            {
-              "name": "deleted_at",
-              "type": "datetime",
-              "nullable": true,
-              "description": "[Deletion Timestamp] - Marks when the comment was soft-deleted for moderation.\n\nNull unless deleted. Supports non-destructive moderation policies."
-            }
-          ],
-          "uniqueIndexes": [],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "post_id",
-                "created_at"
-              ],
-              "description": "[Performance Index] - Ensures efficient retrieval of comments for a post in chronological order."
-            }
-          ],
-          "ginIndexes": [
-            {
-              "fieldName": "content",
-              "description": "[Full-Text Search Index] - Enables search and filtering by comment content in compliance with search and discovery features."
-            }
-          ]
-        },
-        {
-          "name": "discussion_board_comment_reply",
-          "description": "[Comment Reply Entity] - Implements threaded replies under parent comments, fulfilling the 'threaded discussion' and nested commenting requirements.\n\nThis model represents second-level (reply) comments and supports branching conversation trees. Fully normalized: replies store atomic linkage to both parent comment and author, no redundant user/post data. For example, used when a user replies directly to someone else's comment rather than the entire post.\n\nKey relationships: References 'discussion_board_comment' (parent) and 'discussion_board_user' (replier). Special behaviors: Subject to moderation, only created by registered members.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "[Primary Key] - Unique identifier for each comment reply."
-          },
-          "foreignFields": [
-            {
-              "name": "parent_comment_id",
-              "type": "uuid",
-              "model": "discussion_board_comment",
-              "relation": {
-                "name": "parent_comment",
-                "model": "discussion_board_comment",
-                "fields": [
-                  "parent_comment_id"
-                ],
-                "references": [
-                  "id"
-                ],
-                "targetModel": "discussion_board_comment"
-              },
-              "unique": false,
-              "nullable": false,
-              "description": "[Parent Comment Foreign Key] - Links to the original comment being replied to. Enforces normalized conversation tree."
-            },
-            {
-              "name": "user_id",
-              "type": "uuid",
-              "model": "discussion_board_user",
-              "relation": {
-                "name": "user",
-                "model": "discussion_board_user",
-                "fields": [
-                  "user_id"
-                ],
-                "references": [
-                  "id"
-                ],
-                "targetModel": "discussion_board_user"
-              },
-              "unique": false,
-              "nullable": false,
-              "description": "[User Foreign Key] - References the registered user who authored the reply. Maintains author attribution and normalization."
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "content",
-              "type": "string",
-              "nullable": false,
-              "description": "[Reply Content] - Atomic text content of the reply."
-            },
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "nullable": false,
-              "description": "[Creation Timestamp] - When the reply was made."
-            },
-            {
-              "name": "updated_at",
-              "type": "datetime",
-              "nullable": true,
-              "description": "[Update Timestamp] - Last edit time for the reply."
-            },
-            {
-              "name": "deleted_at",
-              "type": "datetime",
-              "nullable": true,
-              "description": "[Deletion Timestamp] - If set, reply is soft deleted."
-            }
-          ],
-          "uniqueIndexes": [],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "parent_comment_id",
-                "created_at"
-              ],
-              "description": "[Performance Index] - Fetch replies for a comment in chronological order."
-            }
-          ],
-          "ginIndexes": [
-            {
-              "fieldName": "content",
-              "description": "[Full-Text Search Index] - Enables searching within replies."
-            }
-          ]
-        },
-        {
-          "name": "discussion_board_post_vote",
-          "description": "[Post Vote Entity] - Implements upvoting/feedback requirements for posts as found in the feature list and requirements analysis.\n\nEach record reflects a user's upvote or helpfulness mark for a post. Ensures 3NF, storing only the link between user, post, and their vote status (no aggregations). Example: a user upvotes a post to indicate it was insightful. \n\nKey relationships: User can vote once per post, and votes are tracked per user and post. Special behaviors: Unique constraint prevents duplicate voting.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "[Primary Key] - Unique vote record ID."
-          },
-          "foreignFields": [
-            {
-              "name": "user_id",
-              "type": "uuid",
-              "model": "discussion_board_user",
-              "relation": {
-                "name": "user",
-                "model": "discussion_board_user",
-                "fields": [
-                  "user_id"
-                ],
-                "references": [
-                  "id"
-                ],
-                "targetModel": "discussion_board_user"
-              },
-              "unique": false,
-              "nullable": false,
-              "description": "[User Foreign Key] - The member casting the vote. Enforces normalization and user attribution."
-            },
-            {
-              "name": "post_id",
-              "type": "uuid",
-              "model": "discussion_board_post",
-              "relation": {
-                "name": "post",
-                "model": "discussion_board_post",
-                "fields": [
-                  "post_id"
-                ],
-                "references": [
-                  "id"
-                ],
-                "targetModel": "discussion_board_post"
-              },
-              "unique": false,
-              "nullable": false,
-              "description": "[Post Foreign Key] - The post being upvoted."
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "nullable": false,
-              "description": "[Vote Timestamp] - When the vote was cast."
-            }
-          ],
-          "uniqueIndexes": [
-            {
-              "fieldNames": [
-                "user_id",
-                "post_id"
-              ],
-              "unique": true,
-              "description": "[Unique Vote Constraint] - Ensures a user can only cast one vote per post (per upvoting rules)."
-            }
-          ],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "post_id"
-              ],
-              "description": "[Performance Index] - For efficient retrieval of votes per post."
-            }
-          ],
-          "ginIndexes": []
-        },
-        {
-          "name": "discussion_board_comment_vote",
-          "description": "[Comment Vote Entity] - Implements voting/feedback for comments per feature list.\n\nThis tracks individual user's upvotes on comments. Third normal form is maintained by tracking one record per user/comment pair, no aggregation is stored. For example, when a user flags a reply as helpful. \n\nKey relationships: References user and comment, and each user can vote only once per comment.\nSpecial behaviors: Enforced by unique index on (user_id, comment_id).",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "[Primary Key] - Unique identifier for each vote record."
-          },
-          "foreignFields": [
-            {
-              "name": "user_id",
-              "type": "uuid",
-              "model": "discussion_board_user",
-              "relation": {
-                "name": "user",
-                "model": "discussion_board_user",
-                "fields": [
-                  "user_id"
-                ],
-                "references": [
-                  "id"
-                ],
-                "targetModel": "discussion_board_user"
-              },
-              "unique": false,
-              "nullable": false,
-              "description": "[User Foreign Key] - Who cast the vote. Enables user-specific voting records."
-            },
-            {
-              "name": "comment_id",
-              "type": "uuid",
-              "model": "discussion_board_comment",
-              "relation": {
-                "name": "comment",
-                "model": "discussion_board_comment",
-                "fields": [
-                  "comment_id"
-                ],
-                "references": [
-                  "id"
-                ],
-                "targetModel": "discussion_board_comment"
-              },
-              "unique": false,
-              "nullable": false,
-              "description": "[Comment Foreign Key] - The comment that was upvoted."
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "nullable": false,
-              "description": "[Vote Timestamp] - When the vote was placed."
-            }
-          ],
-          "uniqueIndexes": [
-            {
-              "fieldNames": [
-                "user_id",
-                "comment_id"
-              ],
-              "unique": true,
-              "description": "[Unique Vote Constraint] - User can only vote once per comment."
-            }
-          ],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "comment_id"
-              ],
-              "description": "[Performance Index] - Supports fast aggregation and lookups by comment for votes."
-            }
-          ],
-          "ginIndexes": []
-        }
-      ]
-    },
-    {
-      "filename": "schema-04-moderation_and_reports.prisma",
-      "namespace": "ModerationAndReports",
-      "models": [
-        {
-          "name": "discussion_board_report",
-          "description": "[Content reporting entity] - This implements the user-driven content reporting feature from the requirements analysis (Core Functional Requirement #4: Moderation Tools, Feature List: Post & Comment Moderation, Moderation Process).\n\nEnables users to report posts or comments for violating board policies or through user feedback. Maintains 3NF compliance by holding only the reporting action details, with references to both the reporting user and the target (post or comment).\nFor example, a user can report a comment for hate speech. Key relationships: links to user, moderator (optional, after handling), target post or comment, and the review action. Special behaviors: All reports are auditable and must trigger notifications and potential moderation workflow.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "[Primary key] - Unique UUID identifier for each report. Implements the requirement for unique identification of each report instance. Maintains normalization by serving as the table's reference point.",
-            "isId": true,
-            "isGenerated": true
-          },
-          "foreignFields": [
-            {
-              "name": "reporting_user_id",
-              "type": "uuid",
-              "relation": {
-                "name": "reporting_user",
-                "targetModel": "discussion_board_user"
-              },
-              "relationType": "m:1",
-              "unique": false,
-              "nullable": false,
-              "description": "[Reporter] - Implements the requirement to know which user initiated the report. Links to the reporting user. Maintains normalization by storing a single user UUID, not denormalized details. For example, a user who submits a report on a comment."
-            },
-            {
-              "name": "moderator_id",
-              "type": "uuid",
-              "relation": {
-                "name": "moderator",
-                "targetModel": "discussion_board_moderator"
-              },
-              "relationType": "m:1",
-              "unique": false,
-              "nullable": true,
-              "description": "[Moderator who handles the report] - Implements the requirement for tracking who moderates or closes a report. Nullable at creation; assigned after review is completed. Maintains normalization as a link only, not a record of moderator data."
-            },
-            {
-              "name": "reported_post_id",
-              "type": "uuid",
-              "relation": {
-                "name": "reported_post",
-                "targetModel": "discussion_board_post"
-              },
-              "relationType": "m:1",
-              "unique": false,
-              "nullable": true,
-              "description": "[Reported post] - Refers to the reported post if applicable. Null when the report is for a comment. Maintains normalization by pointing only to the post ID."
-            },
-            {
-              "name": "reported_comment_id",
-              "type": "uuid",
-              "relation": {
-                "name": "reported_comment",
-                "targetModel": "discussion_board_comment"
-              },
-              "relationType": "m:1",
-              "unique": false,
-              "nullable": true,
-              "description": "[Reported comment] - Refers to the reported comment if applicable. Null when the report is for a post. Maintains normalization by linking to comment UUID only."
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "reason",
-              "type": "string",
-              "nullable": false,
-              "description": "[Report reason] - Implements requirement to capture user-selected reason for reporting. Business meaning: The reason the reporting user chose for flagging content. Maintains normalization by storing only atomic reason text. For example: \"hate speech\", \"spam\".",
-              "isUnique": false
-            },
-            {
-              "name": "status",
-              "type": "string",
-              "nullable": false,
-              "description": "[Report status] - Tracks the current processing status of the report. E.g., \"pending\", \"in_review\", \"resolved\", \"dismissed\". Maintains normalization by using a single status string, not state history.",
-              "isUnique": false
-            },
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "nullable": false,
-              "description": "[Report creation time] - Stores when the report was filed. Implements audit compliance requirement.",
-              "isUnique": false
-            },
-            {
-              "name": "resolved_at",
-              "type": "datetime",
-              "nullable": true,
-              "description": "[Report resolution time] - When the report was resolved (nullable until handled by a moderator). Ensures normalization as a timestamp only.",
-              "isUnique": false
-            }
-          ],
-          "uniqueIndexes": [],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "status",
-                "created_at"
-              ],
-              "description": "Index for quick filtering of reports by status and time for moderation dashboard."
-            }
-          ],
-          "ginIndexes": [
-            {
-              "fieldName": "reason",
-              "description": "Trigram GIN index for searching similar reporting reasons."
-            }
-          ]
-        },
-        {
-          "name": "discussion_board_moderation_action",
-          "description": "[Moderator action log] - Implements the requirement for tracking and auditing all moderation decisions (Requirements Analysis: Moderation Tools, Moderation Policy: Record-Keeping).\n\nRecords every moderation step (warn, ban, post removal, etc.) taken in response to content or users. Maintains 3NF compliance by storing atomic action details and foreign keys only. For example, logs every 'warn user' or 'remove post' event.\n\nKey relationships: Connects to moderator who performed the action, the subject user, and the content involved (if any). Special behaviors: Must support comprehensive auditability of all moderation outcomes.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "[Primary key] - Unique UUID for each moderation action. Guarantees unique tracking with referential security.",
-            "isId": true,
-            "isGenerated": true
-          },
-          "foreignFields": [
-            {
-              "name": "moderator_id",
-              "type": "uuid",
-              "relation": {
-                "name": "moderator",
-                "targetModel": "discussion_board_moderator"
-              },
-              "relationType": "m:1",
-              "unique": false,
-              "nullable": false,
-              "description": "[Moderator reference] - Implements requirement for knowing the responsible moderator for every action. Maintains normalization and accountability."
-            },
-            {
-              "name": "subject_user_id",
-              "type": "uuid",
-              "relation": {
-                "name": "subject_user",
-                "targetModel": "discussion_board_user"
-              },
-              "relationType": "m:1",
-              "unique": false,
-              "nullable": false,
-              "description": "[Subject user] - The user affected by this moderation action. Maintains 3NF by storing only foreign key reference. E.g., user who is warned, banned, etc."
-            },
-            {
-              "name": "related_post_id",
-              "type": "uuid",
-              "relation": {
-                "name": "related_post",
-                "targetModel": "discussion_board_post"
-              },
-              "relationType": "m:1",
-              "unique": false,
-              "nullable": true,
-              "description": "[Involved post] - References the post affected by the action if applicable. Null if, e.g., pure user action (ban/warning, unrelated to a post)."
-            },
-            {
-              "name": "related_comment_id",
-              "type": "uuid",
-              "relation": {
-                "name": "related_comment",
-                "targetModel": "discussion_board_comment"
-              },
-              "relationType": "m:1",
-              "unique": false,
-              "nullable": true,
-              "description": "[Involved comment] - References the comment affected by the action if applicable. Null if not relevant."
-            },
-            {
-              "name": "report_id",
-              "type": "uuid",
-              "relation": {
-                "name": "report",
-                "targetModel": "discussion_board_report"
-              },
-              "relationType": "1:1",
-              "unique": true,
-              "nullable": true,
-              "description": "[Originating report] - (Optional) References the report that triggered this moderation action, if relevant. Maintains strict 1:1 relationship for direct audit trail."
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "action_type",
-              "type": "string",
-              "nullable": false,
-              "description": "[Type of action] - Implements requirement for well-classified, auditable actions (e.g., \"warn\", \"ban\", \"remove_post\"). Ensures normalization by recording only atomic action label."
-            },
-            {
-              "name": "action_reason",
-              "type": "string",
-              "nullable": false,
-              "description": "[Action rationale] - Explains why moderator took this action, for audit and transparency. Maintains normalization as atomic field. E.g., \"Repeated hate speech violations\"."
-            },
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "nullable": false,
-              "description": "[Action timestamp] - The time (UTC) when the moderation action was recorded. For audit compliance."
-            }
-          ],
-          "uniqueIndexes": [],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "action_type",
-                "created_at"
-              ],
-              "description": "Composite index for listing actions by type and time for review dashboards."
-            }
-          ],
-          "ginIndexes": [
-            {
-              "fieldName": "action_reason",
-              "description": "Trigram GIN index for searching moderation rationales for review and compliance analytics."
-            }
-          ]
-        },
-        {
-          "name": "discussion_board_warning",
-          "description": "[Warning log] - Implements the warning/strike escalation requirement (Requirements Analysis: Moderation Tools, Moderation Policy: Enforcement Actions).\n\nCaptures records of warnings issued to users before bans. Maintains 3NF by referencing users and moderators without duplicating details. Example: User receives a warning for inappropriate language prior to suspension.\n\nKey relationships: Links to subject user and moderator who issued the warning. Special behaviors: Warnings are auditable, connected to possible subsequent bans, and must be counted for escalation triggers.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "[Primary key] - Unique identifier for each warning. Maintains entity uniqueness and normalization.",
-            "isId": true,
-            "isGenerated": true
-          },
-          "foreignFields": [
-            {
-              "name": "subject_user_id",
-              "type": "uuid",
-              "relation": {
-                "name": "subject_user",
-                "targetModel": "discussion_board_user"
-              },
-              "relationType": "m:1",
-              "unique": false,
-              "nullable": false,
-              "description": "[Warned user] - User receiving the warning. Referenced for escalation and audit. Maintains normalization as atomic relation."
-            },
-            {
-              "name": "moderator_id",
-              "type": "uuid",
-              "relation": {
-                "name": "moderator",
-                "targetModel": "discussion_board_moderator"
-              },
-              "relationType": "m:1",
-              "unique": false,
-              "nullable": false,
-              "description": "[Moderator issuer] - Moderator who issued the warning. Maintains a normalized record of accountability."
-            },
-            {
-              "name": "related_action_id",
-              "type": "uuid",
-              "relation": {
-                "name": "related_action",
-                "targetModel": "discussion_board_moderation_action"
-              },
-              "relationType": "1:1",
-              "unique": true,
-              "nullable": true,
-              "description": "[Related moderation action] - Optionally links this warning to the moderation action log in strict 1:1 mapping."
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "warning_reason",
-              "type": "string",
-              "nullable": false,
-              "description": "[Warning reason] - Explains to user and moderators why the warning was issued. Maintains normalization as atomic value. E.g., \"First time using slurs in a post.\""
-            },
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "nullable": false,
-              "description": "[Timestamp] - Date and time the warning was set. For auditing and escalation count purposes."
-            }
-          ],
-          "uniqueIndexes": [],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "subject_user_id",
-                "created_at"
-              ],
-              "description": "Index to quickly fetch latest warnings for escalation logic."
-            }
-          ],
-          "ginIndexes": [
-            {
-              "fieldName": "warning_reason",
-              "description": "GIN trigram index for searching warning reasons to identify similar past incidents."
-            }
-          ]
-        },
-        {
-          "name": "discussion_board_user_ban",
-          "description": "[User ban record] - Implements the enforcement requirement for user bans and permanent suspensions (Requirements Analysis: Moderation Tools, Moderation Policy: Enforcement Actions, Record-Keeping).\n\nRecords bans with links to subject user, issuing moderator, and (optionally) the originating action. Maintains strict normalization by referencing users/moderators without copying details and separating ban timelines. Example: A user is permanently banned for repeated severe policy violations.\n\nKey relationships: Connects moderator to banned user and source action where relevant. Special behaviors: Ban durations may be permanent or timed, with clear lift dates.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "[Primary key] - Unique UUID for each ban record. Ensures normalization and traceability.",
-            "isId": true,
-            "isGenerated": true
-          },
-          "foreignFields": [
-            {
-              "name": "subject_user_id",
-              "type": "uuid",
-              "relation": {
-                "name": "subject_user",
-                "targetModel": "discussion_board_user"
-              },
-              "relationType": "m:1",
-              "unique": false,
-              "nullable": false,
-              "description": "[Banned user] - User receiving the ban. Maintains normalization by storing atomic UUID reference."
-            },
-            {
-              "name": "moderator_id",
-              "type": "uuid",
-              "relation": {
-                "name": "moderator",
-                "targetModel": "discussion_board_moderator"
-              },
-              "relationType": "m:1",
-              "unique": false,
-              "nullable": false,
-              "description": "[Moderator issuer] - Moderator who enacted the ban. Maintains separate accountability and linkage."
-            },
-            {
-              "name": "related_action_id",
-              "type": "uuid",
-              "relation": {
-                "name": "related_action",
-                "targetModel": "discussion_board_moderation_action"
-              },
-              "relationType": "1:1",
-              "unique": true,
-              "nullable": true,
-              "description": "[Related moderation action] - Optionally links ban to full moderation audit and reporting chain."
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "ban_reason",
-              "type": "string",
-              "nullable": false,
-              "description": "[Reason for ban] - States the policy or specific action meriting the ban for audit and notification. Maintains normalization as atomic string."
-            },
-            {
-              "name": "banned_at",
-              "type": "datetime",
-              "nullable": false,
-              "description": "[Ban date/time] - When the ban was enforced. Maintains auditability as atomic timestamp."
-            },
-            {
-              "name": "ban_lifted_at",
-              "type": "datetime",
-              "nullable": true,
-              "description": "[Ban end date/time] - If temporary, when the ban ends. Null for permanent bans."
-            }
-          ],
-          "uniqueIndexes": [],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "subject_user_id",
-                "banned_at"
-              ],
-              "description": "Index for requesting all bans of a user, sorted by date, to determine recurrence or escalation history."
-            }
-          ],
-          "ginIndexes": [
-            {
-              "fieldName": "ban_reason",
-              "description": "GIN index for searching common ban reasons for policy review and reporting."
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "filename": "schema-05-notifications_and_settings.prisma",
-      "namespace": "NotificationsAndSettings",
-      "models": [
-        {
-          "name": "discussion_board_notification",
-          "description": "[Notification Delivery Record] - This implements the user notification delivery requirement from the requirements analysis (\"Notifications\" in both functional and feature list docs). \n\nThis model records all notification events (e.g., replies to posts, mentions, direct moderation actions) sent to users. Maintains 3NF compliance by keeping each notification atomic and tied to its business trigger—for example, a reply to a user's post generates a row here, which can reference the triggering event elsewhere if needed.\n\nKey relationships: Each notification is associated with a single user (recipient) via discussion_board_user_id. Optionally, can reference other objects (e.g., thread, post, comment) if needed—see enrichment extensions. \nSpecial behaviors: Records must not be deleted for audit purposes (soft deletion via deleted_at). Ensures all notification data is atomic; all aggregations/tracking are handled elsewhere (not here).",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "[Primary key] - Uniquely identifies each notification delivery record. Implements system-wide entity integrity for notifications.",
-            "nullable": false,
-            "unique": true
-          },
-          "foreignFields": [
-            {
-              "name": "discussion_board_user_id",
-              "type": "uuid",
-              "description": "[Recipient User FK] - Implements user targeting for notifications as per notification delivery requirements.\n\nIndicates which user receives the notification. Ensures normalization by separating user data from notification message.\nExample: discussion_board_user_id references the recipient when a new comment/reply triggers this notification.\nRequired, no special constraints beyond FK.",
+              "description": "[School Foreign Key] - 3NF, classroom's school owner.",
               "nullable": false,
               "unique": false,
               "relation": {
-                "targetModel": "discussion_board_user",
-                "name": "discussion_board_user"
+                "name": "school",
+                "targetModel": "attendance_school"
+              }
+            },
+            {
+              "name": "teacher_id",
+              "type": "uuid",
+              "description": "[Lead Teacher FK] - Responsible teacher. 3NF, required (not derived from class roster).",
+              "nullable": false,
+              "unique": false,
+              "relation": {
+                "name": "teacher",
+                "targetModel": "attendance_teacher"
               }
             }
           ],
           "plainFields": [
             {
-              "name": "type",
+              "name": "name",
               "type": "string",
-              "description": "[Notification type] - Implements notification event classification from requirements (reply, mention, moderation, etc.).\nIndicates why the notification was generated. Ensures atomic, single-reason classification.\nExample: type = 'reply', 'mention', 'moderation', etc.",
+              "description": "[Classroom Name] - Label for class listing/selection, atomic.",
               "nullable": false
             },
             {
-              "name": "title",
-              "type": "string",
-              "description": "[Notification title] - Implements the user notification display requirement (subject/summary).\nA short summary for the notification popup or list.\nExample: title = 'You were mentioned in a reply'. Normalized - no derived data.",
-              "nullable": false
-            },
-            {
-              "name": "body",
-              "type": "string",
-              "description": "[Notification message body] - The full message for the notification, as per user notification spec.\nAtomic (not derived). No aggregation. Example: body = 'user123 replied to your post...'.",
-              "nullable": false
-            },
-            {
-              "name": "is_read",
-              "type": "boolean",
-              "description": "[Read status flag] - Implements notification read tracking for user convenience as required (\"in-app alerts\").\nIndicates if a user has already seen the notification. Not pre-calculated.\nExample: is_read = false (unread), true (user has seen).",
+              "name": "grade_level",
+              "type": "int",
+              "description": "[Grade Level] - Integer grade for grouping/stats. Normalized.",
               "nullable": false
             },
             {
               "name": "created_at",
               "type": "datetime",
-              "description": "[Timestamp] - Implements delivery time requirement for chronological sorting/audit. \nExample: created_at = time sent. Not pre-calculated; not duplicated elsewhere.",
-              "nullable": false
-            },
-            {
-              "name": "deleted_at",
-              "type": "datetime",
-              "description": "[Soft deletion timestamp] - Implements auditability requirement for moderation and legal compliance. \nIf not null, record has been deleted (soft; for audit/history). Never hard delete for traceability.",
-              "nullable": true
-            }
-          ],
-          "uniqueIndexes": [],
-          "plainIndexes": [
-            {
-              "fieldNames": [
-                "discussion_board_user_id",
-                "created_at"
-              ],
-              "description": "Frequently queried: retrieves all notifications for a user in chronological order."
-            },
-            {
-              "fieldNames": [
-                "is_read"
-              ],
-              "description": "Facilitates filtering unread notifications."
-            }
-          ],
-          "ginIndexes": [
-            {
-              "fieldName": "title",
-              "description": "Enables fuzzy search over notification titles for user search experience."
-            },
-            {
-              "fieldName": "body",
-              "description": "Enables efficient keyword/full-text search of notification bodies."
-            }
-          ]
-        },
-        {
-          "name": "discussion_board_user_setting",
-          "description": "[User Notification & Preference Settings] - This implements the user notification opt-in/out and user preference storage requirement from the requirements doc. \n\nSolves for flexible, individual settings per user (e.g., notification preferences, email opt-in, UI settings). Fully 3NF normalized: each row represents a single user's preferences—no aggregation or derived values.\n\nKey relationships: 1:1 with discussion_board_user (user_id is unique). Each user has exactly one settings record, enforcing unique settings per user.\nSpecial behaviors: No pre-calculated fields; only stores raw settings flags and parameters. Any derived summaries must be placed in a materialized view.",
-          "material": false,
-          "primaryField": {
-            "name": "id",
-            "type": "uuid",
-            "description": "[Primary key] - Uniquely identifies each user settings record. Entity integrity for user preferences.",
-            "nullable": false,
-            "unique": true
-          },
-          "foreignFields": [
-            {
-              "name": "discussion_board_user_id",
-              "type": "uuid",
-              "description": "[User FK] - Links settings to specific user as per requirement: individualized notification/storage settings.\nNormalization compliance: settings entity separate from user main entity. 1:1 via unique index.\nExample: user opts into email notifications—only this row updates, not user profile.\nRequired, unique (1:1 constraint).",
-              "nullable": false,
-              "unique": true,
-              "relation": {
-                "targetModel": "discussion_board_user",
-                "name": "discussion_board_user"
-              }
-            }
-          ],
-          "plainFields": [
-            {
-              "name": "notification_email_enabled",
-              "type": "boolean",
-              "description": "[Email notification flag] - Stores user opt-in/out (requirement: 'Notification preferences').\nExample: false = do not email the user for notifications. Pure flag; not derived.",
-              "nullable": false
-            },
-            {
-              "name": "notification_in_app_enabled",
-              "type": "boolean",
-              "description": "[In-app notification flag] - Enables or disables in-app notification alerts as per user preference requirement.\nExample: true = show notifications in app. Atomic, not calculated.",
-              "nullable": false
-            },
-            {
-              "name": "theme_preference",
-              "type": "string",
-              "description": "[Theme preference] - User UI setting for accessibility/non-functional requirement.\nE.g.: 'light', 'dark', or other valid strings describing color scheme. Not derived. Atomic; can be used to comply with high-contrast/accessibility requirements.",
-              "nullable": true
-            },
-            {
-              "name": "language_preference",
-              "type": "string",
-              "description": "[Language preference] - User's preferred interface language/locale, as required by UI/UX standard.\nExample: 'en', 'ko', etc. Optional, atomic.\nAtomic—changes only by user input. Not derived.",
-              "nullable": true
-            },
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "description": "[Creation timestamp] - Implements audit/history requirement for settings changes. \nE.g.: created_at = when user settings first created. Not calculated.",
+              "description": "[Created At] - Classroom creation time.",
               "nullable": false
             },
             {
               "name": "updated_at",
               "type": "datetime",
-              "description": "[Updated timestamp] - Last time user changed a preference (audit log compliance).\nNormalization: not a pre-calculated summary. Example: updated_at = when last change saved.",
+              "description": "[Updated At] - Record update time.",
               "nullable": false
             }
           ],
           "uniqueIndexes": [
             {
               "fieldNames": [
-                "discussion_board_user_id"
+                "school_id",
+                "name"
               ],
-              "description": "Enforces 1:1 (user→settings) assignment: a user can have only one settings object.",
+              "unique": true,
+              "description": "Class name must be unique within school."
+            }
+          ],
+          "plainIndexes": [
+            {
+              "fieldNames": [
+                "teacher_id"
+              ],
+              "description": "Optimize by responsible teacher."
+            }
+          ],
+          "ginIndexes": []
+        }
+      ]
+    },
+    {
+      "filename": "schema-02-attendance_auth.prisma",
+      "namespace": "AttendanceAuth",
+      "models": [
+        {
+          "name": "attendance_social_account",
+          "description": "[OAuth2/Social Account Mapping] - This implements the social login integration requirement from the requirements analysis (see '소셜 로그인 및 사용자 역할별 이용 흐름', '07_attendance_auth_social_login.md').\n\nHandles external identity linkage (Google, Naver, etc.) with strict separation from core attendance/role tables. Maintains full 3NF by storing only atomic fields, no denormalized or computed values. \n\nFor example, when a student logs in with a Google or Naver account, the external provider/user key and internal auth user are mapped here.\n\nKey relationships: Must be connected to attendance_auth_account via auth_account_id. There is no direct connection to role-specific tables (teacher/student/parent/admin) for normalization. Special behaviors: Each (provider, social_id) pair is globally unique, and each auth_account_id may have multiple social accounts for cross-platform linking.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[Primary Key] - Implements the requirement for system-wide unique identification. Uniquely identifies a single social account link. Atomic, non-derivable, auto-generated UUID.",
+            "nullable": false,
+            "unique": true
+          },
+          "foreignFields": [
+            {
+              "name": "auth_account_id",
+              "type": "uuid",
+              "description": "[Authentication Account FK] - Links to the local core authentication account that this social account is mapped to. Ensures strict 3NF, never storing redundant user data.",
+              "nullable": false,
+              "unique": false,
+              "relation": {
+                "targetModel": "attendance_auth_account",
+                "name": "attendance_social_account_auth_account_id",
+                "onDelete": "Cascade"
+              }
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "provider",
+              "type": "string",
+              "description": "[Social Provider Name] - Implements the '인증 제공자 종류' requirement. Stores provider key (e.g. 'google', 'naver', 'kakao'). Only atomic provider keys, never human readable names.",
+              "nullable": false,
+              "unique": false
+            },
+            {
+              "name": "social_id",
+              "type": "string",
+              "description": "[Provider-side User ID] - The unique identity issued by the external provider. Implements the external identity mapping requirement without redundancy, strictly atomic.",
+              "nullable": false,
+              "unique": false
+            },
+            {
+              "name": "created_at",
+              "type": "datetime",
+              "description": "[Linkage Timestamp] - Records the link creation UTC time (membership via social account). For evidence, never update or delete, only append new link if needed.",
+              "nullable": false,
+              "unique": false
+            }
+          ],
+          "uniqueIndexes": [
+            {
+              "fieldNames": [
+                "provider",
+                "social_id"
+              ],
+              "description": "[Unique Social Account] - Ensures each provider-user_id pair is only linked once in the system.",
               "unique": true
             }
           ],
           "plainIndexes": [
             {
               "fieldNames": [
-                "theme_preference"
+                "auth_account_id"
               ],
-              "description": "Allows filtering users with certain themes, e.g., for accessibility statistics."
+              "description": "[FK Performance] - For querying all social accounts associated with a base account."
+            }
+          ],
+          "ginIndexes": []
+        },
+        {
+          "name": "attendance_auth_account",
+          "description": "[Authentication Account] - This implements core authentication/account management from multiple requirements (see '소셜 로그인 및 인증 연동 설계', '07_attendance_auth_social_login.md').\n\nPurpose: Represents a single login identity, potentially linked to one or more user roles (student/teacher/parent/admin) but is not itself a 'user' table. Stays in full 3NF by not containing denormalized role or profile data. For example, a parent may have multiple social logins mapped in attendance_social_account but still have one core login account here.\n\nKey relationships: Links to role-specific tables (attendance_teacher, attendance_student, attendance_parent, attendance_admin) via FKs FROM those tables, never the other way. Special behaviors: Email is only used for communication/identification if local login is supported. Soft deletion via deleted_at, never hard delete.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[Primary Key] - Implements unique identity across all authentication schemas.",
+            "nullable": false,
+            "unique": true
+          },
+          "foreignFields": [],
+          "plainFields": [
+            {
+              "name": "email",
+              "type": "string",
+              "description": "[Email] - Optional field for local auth/notification. Must be unique if specified. Null for pure social logins.",
+              "nullable": true,
+              "unique": true
             },
             {
+              "name": "password_hash",
+              "type": "string",
+              "description": "[Password Hash] - Implements local account login. Null for accounts only using social login. Always store hashed, never cleartext.",
+              "nullable": true,
+              "unique": false
+            },
+            {
+              "name": "created_at",
+              "type": "datetime",
+              "description": "[Creation Timestamp] - When the authentication account was created. Never updated.",
+              "nullable": false,
+              "unique": false
+            },
+            {
+              "name": "updated_at",
+              "type": "datetime",
+              "description": "[Last Updated Time] - For profile info or recovery. Update whenever account details change. For evidence/audit.",
+              "nullable": false,
+              "unique": false
+            },
+            {
+              "name": "deleted_at",
+              "type": "datetime",
+              "description": "[Soft Delete Marker] - When account is deactivated/marked deleted. Null = active; non-null = no login permitted. Keeps history for audit evidence.",
+              "nullable": true,
+              "unique": false
+            }
+          ],
+          "uniqueIndexes": [
+            {
               "fieldNames": [
-                "language_preference"
+                "email"
               ],
-              "description": "Facilitates queries for users by language (localized support)."
+              "description": "[Email Uniqueness] - Only one account per email if using local (non-social only) auth.",
+              "unique": true
+            }
+          ],
+          "plainIndexes": [
+            {
+              "fieldNames": [
+                "created_at"
+              ],
+              "description": "[Signup Date Query] - Optimizes reporting on joining activity."
+            }
+          ],
+          "ginIndexes": []
+        },
+        {
+          "name": "attendance_auth_session",
+          "description": "[Session Token Management] - This implements OAuth2 session/static/token management (see 'API 인증 및 권한', '08_attendance_api_design.md').\n\nPurpose: Tracks live/issued authentication sessions (JWTs, scopes, expiration). 3NF by not including calculated/denormalized fields (e.g. profile email, role, permissions).\n\nFor example, upon login, a session token is issued and tracked here, with linkage to auth_account_id. Used for forced invalidation or JWT refresh flows.\n\nKey relationships: Linked to attendance_auth_account via FK, for query of active/inactive sessions per account. Special behaviors: On logoff, session is marked as revoked_at instead of hard deletion for audit chain. \n",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[Primary Key] - Unique identifier of the auth session. Required for linking sessions for audit purposes, strict 3NF; atomic.",
+            "nullable": false,
+            "unique": true
+          },
+          "foreignFields": [
+            {
+              "name": "auth_account_id",
+              "type": "uuid",
+              "description": "[FK: Auth Account] - Links session to login identity. For example, querying all sessions for a given account. Not unique (1:N).",
+              "nullable": false,
+              "unique": false,
+              "relation": {
+                "targetModel": "attendance_auth_account",
+                "name": "attendance_auth_session_auth_account_id",
+                "onDelete": "Cascade"
+              }
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "session_token",
+              "type": "string",
+              "description": "[Session Token] - Persisted JWT or opaque token. Atomic and strictly not reused in multiple records. Never denormalized profile or calculated data.",
+              "nullable": false,
+              "unique": true
+            },
+            {
+              "name": "issued_at",
+              "type": "datetime",
+              "description": "[Issue Time] - UTC creation of the session. Never updated.",
+              "nullable": false,
+              "unique": false
+            },
+            {
+              "name": "expires_at",
+              "type": "datetime",
+              "description": "[Expire Time] - When the token or session is no longer valid. Value set according to OAuth2 flow. Never calculated in table, only stored.",
+              "nullable": false,
+              "unique": false
+            },
+            {
+              "name": "revoked_at",
+              "type": "datetime",
+              "description": "[Revoke Time] - Non-null when session is explicitly ended (logout, forced expire, etc.). Null means active session. Do not delete for audit.",
+              "nullable": true,
+              "unique": false
+            },
+            {
+              "name": "user_agent",
+              "type": "string",
+              "description": "[User Agent Info] - Optional: Stores string identifying device or client info for session context. Useful for audit. 3NF compliant, atomic field only.",
+              "nullable": true,
+              "unique": false
+            },
+            {
+              "name": "ip_address",
+              "type": "string",
+              "description": "[IP Address] - Optional: Source IP of session creation. Needed for anomaly detection, audit. Never stores other calculated network info.",
+              "nullable": true,
+              "unique": false
+            }
+          ],
+          "uniqueIndexes": [
+            {
+              "fieldNames": [
+                "session_token"
+              ],
+              "description": "[Session Token Uniqueness] - Ensures each session_token is only assigned to a single session. Required for secure token revocation.",
+              "unique": true
+            }
+          ],
+          "plainIndexes": [
+            {
+              "fieldNames": [
+                "auth_account_id",
+                "issued_at"
+              ],
+              "description": "[Performance: Auth Account Sessions] - Query all sessions per user, ordered by creation time."
             }
           ],
           "ginIndexes": []
@@ -1876,179 +710,1342 @@
       ]
     },
     {
-      "filename": "schema-06-content_and_attachments.prisma",
-      "namespace": "ContentAndAttachments",
+      "filename": "schema-03-attendance_attendance.prisma",
+      "namespace": "Attendance",
       "models": [
         {
-          "name": "discussion_board_attachment",
-          "description": "Attachment Table - This implements the 'Rich text support: formatting, hyperlinks, quoting, and simple image attachments' and 'Support for images, videos, attachments within posts and comments' requirements from the requirements analysis and feature list documents. \n\nThis table stores metadata about files (images, documents, etc.) that users can attach to posts or comments. Maintains full 3NF compliance by separating attachment data from posts/comments – only storing atomic, non-derived file information per attachment. For example, when a user uploads an image for their post, a new row is inserted here with file URL, MIME type, and creator.\n\nKey relationships: Linked from post/comment via the discussion_board_post_attachment_link table. \nSpecial behaviors: Only atomic metadata fields, no pre-calculated or denormalized data. Attachments can exist independently of post linkage, allowing re-use or orphan clean up.",
+          "name": "attendance_attendance_record",
+          "description": "Attendance Record - This implements tracking each student's attendance submission for all required classes/sessions, fulfilling the requirement for verifiable and auditable attendance management as described in the documentation (see attendance check flow, teacher dashboard requirements).\n\nThis table maintains a normalized, atomic log of all individual attendance checks, each with explicit references to students, teachers, classrooms, and attendance codes (if code-based). 3NF is upheld by ensuring all non-key attributes are fully dependent on the attendance record's identity, with no derived or calculated data. Example: Each submission (present, late, absent, leave) with its metadata and linked code is recorded here for query, audit, and reporting.\n\nKey relationships: Links to students (attendance_student), classes (attendance_classroom), teachers (attendance_teacher), attendance methods (attendance_attendance_method), and attendance codes (attendance_attendance_code, optional).\nSpecial behaviors: All changes (corrections, exceptions) result in a new record or a state change, never mutation in place. No duplicate attendance for the same student/session is allowed (enforced by unique index).",
           "material": false,
           "primaryField": {
             "name": "id",
             "type": "uuid",
-            "description": "Primary key - Unique identifier for each attachment. Implements the core need for entity integrity. Ensures normalization by using a surrogate key, not natural (e.g., filename). For example, 'dde0c1b6-adde-40f6-b624-f61d438d1951'.",
-            "id": true,
-            "dbType": "Uuid"
+            "description": "Unique primary key for each attendance record entry. Implements requirement for uniqueness and auditability. Atomic and canonical - no semantic meaning. Example: Used as main reference in logs/audit."
           },
           "foreignFields": [
             {
-              "name": "uploaded_by_user_id",
+              "name": "student_id",
               "type": "uuid",
+              "description": "Linked attendance_student.id - Which student this record represents. Fulfills the need to query per-student attendance for dashboards, parent notifications, etc. Maintains 3NF by using atomic FK. Always required.",
+              "model": "attendance_student",
               "relation": {
-                "type": "belongsTo",
-                "targetModel": "discussion_board_user",
-                "name": "user"
+                "name": "attendance_attendance_record_student_id_fkey",
+                "fields": [
+                  "student_id"
+                ],
+                "references": [
+                  "id"
+                ],
+                "targetModel": "attendance_student"
               },
-              "nullable": false,
               "unique": false,
-              "description": "Uploader Reference - Implements auditability. Points to the user who uploaded the attachment. Ensures normalization by linking to user table, not duplicating any user info. For example, retrieves uploader username via join. Enforced as NOT NULL; attachments must be owned."
+              "nullable": false
+            },
+            {
+              "name": "classroom_id",
+              "type": "uuid",
+              "description": "Linked attendance_classroom.id - The class/lesson this attendance is for. Implements requirement to support per-class reporting and entrance filtering. Maintains normalized relationships.",
+              "model": "attendance_classroom",
+              "relation": {
+                "name": "attendance_attendance_record_classroom_id_fkey",
+                "fields": [
+                  "classroom_id"
+                ],
+                "references": [
+                  "id"
+                ],
+                "targetModel": "attendance_classroom"
+              },
+              "unique": false,
+              "nullable": false
+            },
+            {
+              "name": "teacher_id",
+              "type": "uuid",
+              "description": "Linked attendance_teacher.id - Teacher responsible for the attendance check. Needed for audit trails, permission checks, dashboard. Maintains normalized structure.",
+              "model": "attendance_teacher",
+              "relation": {
+                "name": "attendance_attendance_record_teacher_id_fkey",
+                "fields": [
+                  "teacher_id"
+                ],
+                "references": [
+                  "id"
+                ],
+                "targetModel": "attendance_teacher"
+              },
+              "unique": false,
+              "nullable": false
+            },
+            {
+              "name": "method_id",
+              "type": "uuid",
+              "description": "Linked attendance_attendance_method.id - The method the student used to check attendance (code, QR, manual, API, etc.), realizing the system's need to track how attendance was registered. Required, normalized to support method lookups and stats.",
+              "model": "attendance_attendance_method",
+              "relation": {
+                "name": "attendance_attendance_record_method_id_fkey",
+                "fields": [
+                  "method_id"
+                ],
+                "references": [
+                  "id"
+                ],
+                "targetModel": "attendance_attendance_method"
+              },
+              "unique": false,
+              "nullable": false
+            },
+            {
+              "name": "code_id",
+              "type": "uuid",
+              "description": "Linked attendance_attendance_code.id (Nullable) - If attendance was submitted using a code, this references the code used, fulfilling the audit and fraud prevention requirement. Optional as not all sessions may use code-based attendance.",
+              "model": "attendance_attendance_code",
+              "relation": {
+                "name": "attendance_attendance_record_code_id_fkey",
+                "fields": [
+                  "code_id"
+                ],
+                "references": [
+                  "id"
+                ],
+                "targetModel": "attendance_attendance_code"
+              },
+              "unique": false,
+              "nullable": true
             }
           ],
           "plainFields": [
             {
-              "name": "file_url",
-              "type": "uri",
-              "description": "File URL - Implements the attachment access requirement. Stores the exact URL or URI where the uploaded file can be retrieved. Atomic, with no derived data. For example, 'https://cdn.example.com/uploads/abc123.png'.",
-              "nullable": false
-            },
-            {
-              "name": "file_name",
-              "type": "string",
-              "description": "Original File Name - Human-readable uploaded filename. Implements the need for user context, without duplicating elsewhere. Atomic, e.g., 'budget_chart_2025.pdf'.",
-              "nullable": false
-            },
-            {
-              "name": "mime_type",
-              "type": "string",
-              "description": "MIME Type - Describes file content type for client rendering. Atomic, non-derived. For example, 'image/png', 'application/pdf'.",
-              "nullable": false
-            },
-            {
-              "name": "created_at",
+              "name": "checked_at",
               "type": "datetime",
-              "description": "Upload Timestamp - Records exact instant of upload. Implements audit trail. Ensures normalization by not storing redundant date info. Example: '2025-07-11T13:36:05'.",
+              "description": "The timestamp when the student checked in (local TZ). Implements need for audit, lateness/absence resolution. Normalized and atomic. Example: Used for attendance time window checks.",
               "nullable": false
             },
             {
-              "name": "deleted_at",
-              "type": "datetime",
-              "description": "Soft Delete Timestamp - Implements safe deletion policies. Null if the attachment is active, populated if scheduled/deleted. Enables 3NF compliance by representing deletion as a state, not a derived/conflated field. Example: null or '2025-07-11T13:50:00'.",
+              "name": "status",
+              "type": "string",
+              "description": "Attendance status (e.g., present, late, absent, leave). Implements the business need for granular tracking. Normalized - valid options constrained via application/business layer. Example: 'present', 'late'.",
+              "nullable": false
+            },
+            {
+              "name": "exception_reason",
+              "type": "string",
+              "description": "Free text; optional reason for abnormal status (if any). Ex: \"Sick leave note from parent\". Implements exception tracking requirement as per teacher/admin needs. 3NF: No encoding, just atomic explanatory string.",
               "nullable": true
             }
           ],
           "uniqueIndexes": [
             {
-              "name": "uniq_attachment_file_url",
+              "name": "uniq_attendance_record_student_classroom_checked_at",
               "fieldNames": [
-                "file_url"
+                "student_id",
+                "classroom_id",
+                "checked_at"
               ],
               "unique": true,
-              "description": "Unique File URL - Prevents multiple attachments referencing the exact same URL. Ensures integrity for referenced resources."
+              "description": "Enforces that a student can only have one attendance record for a classroom at a specific time. Implements deduplication for integrity."
             }
           ],
           "plainIndexes": [
             {
-              "name": "idx_attachment_uploaded_by_and_created_at",
+              "name": "idx_attendance_record_status_checked_at",
               "fieldNames": [
-                "uploaded_by_user_id",
-                "created_at"
+                "status",
+                "checked_at"
               ],
-              "description": "Uploader + Date Index - Accelerates queries for attachment activity by user and time."
+              "description": "Composite index to support frequent queries: status statistics per time window, real-time queries for present/absent/late distributions."
             }
           ],
           "ginIndexes": []
         },
         {
-          "name": "discussion_board_post_attachment_link",
-          "description": "Post-Attachment Link Table - This implements 'Support for images, videos, attachments within posts and comments' and 'Rich media embeds' as described in the requirements and feature list.\n\nLinks attachments to posts, enabling posts to reference multiple files or for files to be linked to multiple posts (M:N relationship). Maintains strict 3NF by removing arrays or repeated groups from posts—always modeled as separate linking records. For example, a post with two attachments will have two rows in this table, specifying the order of display.\n\nKey relationships: FK to discussion_board_post and to discussion_board_attachment. No denormalized or derived fields. \nSpecial behaviors: The link may include an attachment order/sequence. Links can be disabled instead of physically deleted for auditability.",
+          "name": "attendance_attendance_code",
+          "description": "Attendance Code - This table realizes the requirement for randomly generated, per-session attendance codes to be distributed by teachers and used by students (see attendance check flow and code-based authentication requirement).\n\nFully normalized: each code record is atomic, generated for only one classroom & session, no extra calculated fields. For example, prevents code reuse and enables auditability.\n\nKey relationships: Linked to classroom (attendance_classroom), teacher (attendance_teacher). Snapshots/audit handled via code log table.",
           "material": false,
           "primaryField": {
             "name": "id",
             "type": "uuid",
-            "description": "Primary key - Unique identifier for each link between a post and an attachment. Implements atomicity and uniqueness, not derived from other columns. For example, '594b9c7c-2b91-4b5b-89f4-8277e7b58232'.",
-            "id": true,
-            "dbType": "Uuid"
+            "description": "Primary key. Uniquely identifies each attendance code generated. Atomic, normalized (no semantic encoding)."
           },
           "foreignFields": [
             {
-              "name": "post_id",
+              "name": "classroom_id",
               "type": "uuid",
+              "description": "FK to attendance_classroom. The class this code is issued for. Required for context, per requirements (teacher dashboard, stats). 3NF compliance: atomic value.",
+              "model": "attendance_classroom",
               "relation": {
-                "type": "belongsTo",
-                "targetModel": "discussion_board_post",
-                "name": "post"
+                "name": "attendance_attendance_code_classroom_id_fkey",
+                "fields": [
+                  "classroom_id"
+                ],
+                "references": [
+                  "id"
+                ],
+                "targetModel": "attendance_classroom"
               },
-              "nullable": false,
               "unique": false,
-              "description": "Post Reference - Links this attachment usage to a specific post. Implements normalized linking with no duplication of post information. All post attachment links must specify a valid post."
+              "nullable": false
             },
             {
-              "name": "attachment_id",
+              "name": "teacher_id",
               "type": "uuid",
+              "description": "FK to attendance_teacher. Teacher who created this code. Needed for audit and fraud prevention (and per teacher dashboard). 3NF by reference.",
+              "model": "attendance_teacher",
               "relation": {
-                "type": "belongsTo",
-                "targetModel": "discussion_board_attachment",
-                "name": "attachment"
+                "name": "attendance_attendance_code_teacher_id_fkey",
+                "fields": [
+                  "teacher_id"
+                ],
+                "references": [
+                  "id"
+                ],
+                "targetModel": "attendance_teacher"
               },
-              "nullable": false,
               "unique": false,
-              "description": "Attachment Reference - Links this record to exactly one file in discussion_board_attachment. No derived or duplicated fields about the attachment itself. Ensures referential integrity – cannot link to nonexistent files."
+              "nullable": false
             }
           ],
           "plainFields": [
             {
-              "name": "attachment_order",
-              "type": "int",
-              "description": "Attachment Order - Stores the display or embedding sequence for multiple attachments within a single post. Implements display ordering without violating normalization. Example: 1=first image, 2=second, etc. Atomic field only.",
+              "name": "code_value",
+              "type": "string",
+              "description": "Attendance code value (e.g., 'K8F9Z4'). Implements the actual code distributed to students. Constrained at application level (capital alphanum, fixed length per requirement). 3NF - no encoding, atomic.",
               "nullable": false
             },
             {
-              "name": "disabled",
+              "name": "issued_at",
+              "type": "datetime",
+              "description": "Issuing time (when created by teacher/dash/API). Needed for audit, stats dashboard, validation window. Example: Used for checking code validity period.",
+              "nullable": false
+            },
+            {
+              "name": "expires_at",
+              "type": "datetime",
+              "description": "Timestamp when this code expires and becomes invalid. Business-driven requirement for fraud/liability. No calculation here (which is done at app/backend level).",
+              "nullable": false
+            },
+            {
+              "name": "is_active",
               "type": "boolean",
-              "description": "Attachment Link Disabled Flag - Marks whether this attachment link is logically disabled (e.g., hidden, not shown). Allows reversible removal without deleting the underlying attachment. Atomic, no derived meaning. Example: true/false.",
+              "description": "Flag set true if code is currently valid, false if expired or revoked. Implements business logic of code lifecycle.",
               "nullable": false
-            },
-            {
-              "name": "created_at",
-              "type": "datetime",
-              "description": "Link Creation Timestamp - When the attachment was first associated with the post. For audit trails. Example: '2025-07-11T13:36:05'.",
-              "nullable": false
-            },
-            {
-              "name": "deleted_at",
-              "type": "datetime",
-              "description": "Soft Delete Timestamp - If set, logically deletes the attachment link rather than physically removing it. Maintains history and 3NF compliance. Example: null or '2025-07-11T14:00:00'.",
-              "nullable": true
             }
           ],
           "uniqueIndexes": [
             {
-              "name": "uniq_post_attachment_order",
+              "name": "uniq_attendance_code_classroom_code_value_is_active",
               "fieldNames": [
-                "post_id",
-                "attachment_order"
+                "classroom_id",
+                "code_value",
+                "is_active"
               ],
               "unique": true,
-              "description": "Unique Attachment Order per Post - Ensures a post cannot have two attachments at the same display order (prevents duplicate image slots within a single post)."
-            },
-            {
-              "name": "uniq_post_attachment_pair",
-              "fieldNames": [
-                "post_id",
-                "attachment_id"
-              ],
-              "unique": true,
-              "description": "Unique Post-Attachment Pair - Prevents the same file from being attached multiple times to the same post (M:N link uniqueness constraint)."
+              "description": "No duplicate active codes for same classroom, per fraud prevention & requirement doc."
             }
           ],
           "plainIndexes": [
             {
-              "name": "idx_attachment_id_and_created_at",
+              "name": "idx_attendance_code_issued_at_expires_at",
               "fieldNames": [
-                "attachment_id",
-                "created_at"
+                "issued_at",
+                "expires_at"
               ],
-              "description": "Attachment Link + Time Index - For finding all posts using a given file, ordered by creation."
+              "description": "Support code lookups by time windows (teacher dashboard, code validation)."
+            }
+          ],
+          "ginIndexes": []
+        },
+        {
+          "name": "attendance_attendance_code_log",
+          "description": "Attendance Code Log - Implements the audit/snapshot pattern for attendance code creation and usage. Required for both technical and legal audit (who made, who used, when, and from where), per system requirements for auditability, fraud tracing, and compliance.\n\nEach entry is atomic, attached to a specific attendance code. 3NF compliance ensured by FK and atomic fields; all calculated/aggregated data in materialized view tables only.\n\nKey relationships: Linked to the attendance_attendance_code it logs.\n\nSpecial behavior: Immutable log. New record per event.\nExample usage: Logging all access, creation, use attempts, and state changes to code (issued, used, expired, revoked, etc.).",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "Primary key. Uniquely identifies each code log event. Enables chronological and entity-specific log queries. Atomic pointer."
+          },
+          "foreignFields": [
+            {
+              "name": "code_id",
+              "type": "uuid",
+              "description": "FK to attendance_attendance_code. Exactly which code this event is related to. 3NF: Only FK, no encoding.",
+              "model": "attendance_attendance_code",
+              "relation": {
+                "name": "attendance_attendance_code_log_code_id_fkey",
+                "fields": [
+                  "code_id"
+                ],
+                "references": [
+                  "id"
+                ],
+                "targetModel": "attendance_attendance_code"
+              },
+              "unique": false,
+              "nullable": false
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "event_type",
+              "type": "string",
+              "description": "Event type (issued, used, expired, revoked, failure, etc.). Implements business need for distinguishing code lifecycle and possible abnormal usage. Normalized and atomic.",
+              "nullable": false
+            },
+            {
+              "name": "event_time",
+              "type": "datetime",
+              "description": "Timestamp for when this event occurred (code creation/use/expire). Needed for indisputable audit. 3NF: atomic time point.",
+              "nullable": false
+            },
+            {
+              "name": "actor_id",
+              "type": "uuid",
+              "description": "UUID of the actor who triggered the event (could be teacher, student, system). Implements actor traceability per audit requirement. Cast/foreign key checks managed at application level, since polymorphic.",
+              "nullable": true
+            },
+            {
+              "name": "actor_type",
+              "type": "string",
+              "description": "Who or what type initiated (teacher, student, admin, system process). Required for full trace. 3NF. Example: 'student'.",
+              "nullable": false
+            },
+            {
+              "name": "details",
+              "type": "string",
+              "description": "Optional free text for contextual event note (e.g.: IP, device info, error trace). Useful for advanced audit/troubleshooting. Null when none.",
+              "nullable": true
+            }
+          ],
+          "uniqueIndexes": [],
+          "plainIndexes": [
+            {
+              "name": "idx_attendance_code_log_code_id_event_time",
+              "fieldNames": [
+                "code_id",
+                "event_time"
+              ],
+              "description": "Support efficient ordering and querying of code logs per code."
+            }
+          ],
+          "ginIndexes": []
+        },
+        {
+          "name": "attendance_attendance_method",
+          "description": "Attendance Method Master - Implements the normalization of all possible mechanisms by which attendance is recorded, per the requirements to enable dynamic addition/processing of new attendance types without disrupting the core data model and for analytics (teacher dashboard, admin stats).\n\nThis is a static/master data table holding the canonical list of valid attendance check methods (e.g., code input, QR scan, manual teacher entry, API, NFC). 3NF: only atomic fields.\n\nKey relationships: Referenced from attendance_attendance_record for query, UI, and analytics.\nSpecial behaviors: Application layer manages allowed method list and expansion.\nExample: Used to normalize 'method_id' in other tables.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "PK. Canonical ID of the method. Ensures normalization & referential integrity."
+          },
+          "foreignFields": [],
+          "plainFields": [
+            {
+              "name": "method_name",
+              "type": "string",
+              "description": "Display label / code for method (e.g. \"CODE\", \"QR\", \"MANUAL\"). Atomic value fulfilling 3NF. Used in UI/config. Example usage: show available methods in teacher dashboard.",
+              "nullable": false
+            },
+            {
+              "name": "description",
+              "type": "string",
+              "description": "Explanation of what this method means or how it works. Fulfills need for self-described method catalog/master table. Example: '6-digit random code input by student on web/mobile.'",
+              "nullable": false
+            }
+          ],
+          "uniqueIndexes": [
+            {
+              "name": "uniq_attendance_method_method_name",
+              "fieldNames": [
+                "method_name"
+              ],
+              "unique": true,
+              "description": "Enforces method label uniqueness. No duplicate methods per 3NF."
+            }
+          ],
+          "plainIndexes": [],
+          "ginIndexes": []
+        }
+      ]
+    },
+    {
+      "filename": "schema-04-attendance_notification.prisma",
+      "namespace": "AttendanceNotification",
+      "models": [
+        {
+          "name": "attendance_notification",
+          "description": "[Attendance Notification] - This implements requirements from '학부모 알림 서비스', '관리자/교사 실시간 통지', and '학생 출석 이벤트 발생 시 알림 자동 발송' in the requirements document.\n\nThis table acts as the master record for all scheduled or triggered notifications sent to parents, admins, or other interested parties related to attendance events (출석, 지각, 결석, 조퇴, 등). Maintains full 3NF normalization by separating channel-specific, delivery, and logging details to related tables. For example, when a student's attendance is recorded, a record is created here, traceably triggering one or more outbound notifications via allowed channels.\n\nKey relationships: Linked to attendance_notification_channel for channel management, attendance_notification_history for delivery logging, and foreign keys referencing the event source (attendance_record, student, etc.).\nSpecial behaviors: Only stores normalized trigger/event data, never caches actual delivery results—those are kept in the history table.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[PK] - Implements unique identification for each notification event.\nGlobally unique identifier for tracking and referencing attendance-related notifications. Ensures normalization and system-wide traceability.\nFor example, used as a foreign key in notification channels and history records.",
+            "isRequired": true,
+            "isId": true,
+            "isUnique": true
+          },
+          "foreignFields": [
+            {
+              "name": "attendance_record_id",
+              "type": "uuid",
+              "description": "[FK] - Implements linkage to the attendance event that caused this notification.\nLinks back to the student's attendance record so full audit trail is retained.\nFor example, notification references a specific student's daily check-in/absence event.",
+              "isRequired": true,
+              "relation": {
+                "targetModel": "attendance_attendance_record",
+                "name": "attendance_record",
+                "onDelete": "Cascade"
+              },
+              "unique": false,
+              "nullable": false
+            },
+            {
+              "name": "student_id",
+              "type": "uuid",
+              "description": "[FK] - References attendance_student.\nSpecifies which student this notification relates to. Maintains 3NF by not duplicating student attributes here; join as needed.\nFor example, so parent notifications are correctly directed.",
+              "isRequired": true,
+              "relation": {
+                "targetModel": "attendance_student",
+                "name": "student",
+                "onDelete": "Cascade"
+              },
+              "unique": false,
+              "nullable": false
+            },
+            {
+              "name": "teacher_id",
+              "type": "uuid",
+              "description": "[FK] - References attendance_teacher.\nWho triggered the event/notification (if applicable). Maintains 3NF by not duplicating teacher details.\nUseful for teacher-determined notifications or exception notes.",
+              "isRequired": false,
+              "relation": {
+                "targetModel": "attendance_teacher",
+                "name": "teacher",
+                "onDelete": "SetNull"
+              },
+              "unique": false,
+              "nullable": true
+            },
+            {
+              "name": "classroom_id",
+              "type": "uuid",
+              "description": "[FK] - References attendance_classroom.\nFacilitates filtering/group notification by classroom context. Maintains normalization.\nFor example: Notifications related to whole class events.",
+              "isRequired": true,
+              "relation": {
+                "targetModel": "attendance_classroom",
+                "name": "classroom",
+                "onDelete": "Cascade"
+              },
+              "unique": false,
+              "nullable": false
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "event_type",
+              "type": "string",
+              "description": "[Event Type] - Implements notification event typing.\nEnumerates triggers such as 'present', 'late', 'absent', 'leave'. Maintains normalization by not duplicating status logic elsewhere.\nFor example: 'present' when a student checks in on time.",
+              "nullable": false
+            },
+            {
+              "name": "triggered_at",
+              "type": "datetime",
+              "description": "[Triggered Timestamp] - When this notification event was generated.\nEnsures auditability and sequential event tracking.\nFor example: Record created at the moment attendance is submitted.",
+              "nullable": false
+            },
+            {
+              "name": "message_template",
+              "type": "string",
+              "description": "[Message Template] - Stores the notification template used for this event.\nDoes not store actual sent message (see history table). Maintains normalization.\nFor example: A message like '홍길동 학생이 정상 출석하였습니다.' with placeholders.",
+              "nullable": false
+            }
+          ],
+          "uniqueIndexes": [
+            {
+              "name": "unique_event_per_record",
+              "fieldNames": [
+                "attendance_record_id",
+                "event_type"
+              ],
+              "unique": true,
+              "description": "Ensures that each attendance event triggers only one type of notification per attendance record per event type. For example, cannot notify 'present' for the same attendance twice."
+            }
+          ],
+          "plainIndexes": [
+            {
+              "name": "event_time_idx",
+              "fieldNames": [
+                "triggered_at"
+              ],
+              "description": "For efficient query/filtering of notifications by event occurrence timestamps."
+            }
+          ],
+          "ginIndexes": []
+        },
+        {
+          "name": "attendance_notification_channel",
+          "description": "[Attendance Notification Channel] - Implements requirements for '선호 채널 설정', '알림 방식(앱푸시/SMS/이메일 등) 관리', and '보호자별/학생별 알림 경로 분리 관리' from the requirements document.\n\nThis model manages the available notification delivery channels (push, sms, email, etc.), user-specific preferences, and active/disable settings for outbound messaging. Maintains full 3NF by relating to student, parent, and notification tables without duplicating recipient or contact data.\n\nKey relationships: References student, parent, and notification tables for proper channel delivery. Does not store message delivery results (see history).\nSpecial behaviors: Only the facts about allowed or preferred channels are kept here; status/results are always kept in the history table.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[PK] - Unique identifier for each channel binding.\nEnables reliable foreign key referencing and traceability across the system.\nFor example, maps each channel preference to notifications and history tables.",
+            "isRequired": true,
+            "isId": true,
+            "isUnique": true
+          },
+          "foreignFields": [
+            {
+              "name": "student_id",
+              "type": "uuid",
+              "description": "[FK] - References attendance_student, to route per-student preferences.\nMaintains normalized storage of channel logic without duplicating student or parent info.\nAllows lookups of a student's preferred notification channel.",
+              "isRequired": true,
+              "relation": {
+                "targetModel": "attendance_student",
+                "name": "student",
+                "onDelete": "Cascade"
+              },
+              "unique": false,
+              "nullable": false
+            },
+            {
+              "name": "parent_id",
+              "type": "uuid",
+              "description": "[FK] - References attendance_parent, maps to legal guardians/recipients.\nFor multi-child parents, allows consolidation of notification channel entries per student.\nDoes not duplicate parent contact—always join on FK.",
+              "isRequired": false,
+              "relation": {
+                "targetModel": "attendance_parent",
+                "name": "parent",
+                "onDelete": "Cascade"
+              },
+              "unique": false,
+              "nullable": true
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "channel_type",
+              "type": "string",
+              "description": "[Channel Type] - Defines the type of channel (app_push, sms, email, etc).\nEnumerates all supported outbound notification patterns. Maintains normalization by not embedding channel behavior.\nFor example: 'app_push', 'sms', 'email'.",
+              "nullable": false
+            },
+            {
+              "name": "is_enabled",
+              "type": "boolean",
+              "description": "[Is Enabled] - Whether this channel is currently active for this (student, parent).\nFor example, app_push can be disabled by parent, sms left enabled.",
+              "nullable": false
+            },
+            {
+              "name": "preference_order",
+              "type": "int",
+              "description": "[Preference Order] - Rank or fallback order for channels when multiple are available.\nLower value = higher priority. Used for automated failover logic.\nFor example, 1 for app, 2 for sms, 3 for email.",
+              "nullable": false
+            }
+          ],
+          "uniqueIndexes": [
+            {
+              "name": "unique_channel_per_parent_student_type",
+              "fieldNames": [
+                "student_id",
+                "parent_id",
+                "channel_type"
+              ],
+              "unique": true,
+              "description": "Prevents duplicate channel preference rows for a given (student, parent, channel_type) triplet."
+            }
+          ],
+          "plainIndexes": [
+            {
+              "name": "enabled_idx",
+              "fieldNames": [
+                "is_enabled"
+              ],
+              "description": "Supports fast look-up of all enabled/disabled channel rows across the system."
+            }
+          ],
+          "ginIndexes": []
+        },
+        {
+          "name": "attendance_notification_history",
+          "description": "[Attendance Notification History] - Implements requirements from '알림 이력 관리', '성공/실패 전송 로그', '관리자/교사 피드백', and '발송 결과 데이터 감시 및 분석' in the requirements document.\n\nThis table logs every actual delivery attempt or result per notification and channel, supporting full audit trails, troubleshooting, analytics, and operational reporting. It enforces full normalization by never duplicating notification or channel info, instead referencing via FKs.\n\nKey relationships: Ties to attendance_notification (event), attendance_notification_channel (route/preference), and provides outcome context for analysis/dashboards.\nSpecial behaviors: Marks full status lifecycle: pending, delivered, failed, retried, etc. Never includes user message bodies, only references templates/notification ids.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[PK] - Uniquely identifies each delivery log entry.\nAllows tracking, troubleshooting, and reporting per notification delivery attempt.\nFor example, one notification can have several attempts/rows per channel.",
+            "isRequired": true,
+            "isId": true,
+            "isUnique": true
+          },
+          "foreignFields": [
+            {
+              "name": "notification_id",
+              "type": "uuid",
+              "description": "[FK] - Links to attendance_notification.\nMatches each history record to the exact event/notification it logs. Maintains strict 3NF.",
+              "isRequired": true,
+              "relation": {
+                "targetModel": "attendance_notification",
+                "name": "notification",
+                "onDelete": "Cascade"
+              },
+              "unique": false,
+              "nullable": false
+            },
+            {
+              "name": "channel_id",
+              "type": "uuid",
+              "description": "[FK] - Links to attendance_notification_channel.\nAllows each attempt/result row to be tied to its delivery channel context. Strictly normalized.",
+              "isRequired": true,
+              "relation": {
+                "targetModel": "attendance_notification_channel",
+                "name": "channel",
+                "onDelete": "Cascade"
+              },
+              "unique": false,
+              "nullable": false
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "sent_at",
+              "type": "datetime",
+              "description": "[Sent Timestamp] - Timestamp message was sent or attempted.\nSupports auditability and analytics.",
+              "nullable": false
+            },
+            {
+              "name": "delivered_at",
+              "type": "datetime",
+              "description": "[Delivered Timestamp] - When delivery was confirmed by provider or feedback API.\nMay be null if not delivered.",
+              "nullable": true
+            },
+            {
+              "name": "status",
+              "type": "string",
+              "description": "[Status] - Status of this attempt: 'pending', 'delivered', 'failed', 'retried', etc.\nMaintains normalization by never caching per-notification status elsewhere. Example: 'delivered', 'failed', 'pending'.",
+              "nullable": false
+            },
+            {
+              "name": "error_message",
+              "type": "string",
+              "description": "[Error Message] - Stores provider or system error reason if delivery failed (nullable).\nNever exposes user data. Normalized: no templated message is included.\nFor example, the reported reason by SMS API or system ('invalid phone', 'timeout', etc').",
+              "nullable": true
+            }
+          ],
+          "uniqueIndexes": [],
+          "plainIndexes": [
+            {
+              "name": "status_idx",
+              "fieldNames": [
+                "status"
+              ],
+              "description": "For quick query of notifications by delivery status for operations & dashboard."
+            },
+            {
+              "name": "history_sent_at_idx",
+              "fieldNames": [
+                "sent_at"
+              ],
+              "description": "Used to filter/sort history by time period for advanced reporting."
+            }
+          ],
+          "ginIndexes": []
+        }
+      ]
+    },
+    {
+      "filename": "schema-05-attendance_stats_dashboard.prisma",
+      "namespace": "AttendanceStatsDashboard",
+      "models": [
+        {
+          "name": "attendance_stats_daily",
+          "description": "[Daily Attendance Statistics] - Implements the requirement for daily classroom and school-level attendance summaries (admin/teacher dashboards, period exports) as described in the requirement analysis.\n\nBusiness purpose: Tracks attendance outcomes (present, late, absent, early leave counts) for each classroom and school for a given day. No detailed student-level data, strictly day-level aggregates only. Maintains 3NF by making sure no per-student details or pre-calculated roll-ups outside the denominated statistics. Used for powering summary dashboards and exportable daily reports for teachers/admins.\n\nKey relationships: FK to classroom (required) and school (required).\nSpecial behaviors: One and only one record per classroom+day. Periodic upsert allowed. No denormalized/cached subrecords.\n\nUsage example: Used in dashboard charts, daily reporting, period-over-period comparisons.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[Primary Key] - Unique identifier for this daily classroom/school statistic row. Always atomic, guarantees uniqueness by row."
+          },
+          "foreignFields": [
+            {
+              "name": "classroom_id",
+              "type": "uuid",
+              "description": "[Classroom Reference] - FK to classroom. Ensures stats are specific to a classroom, not global. Required.",
+              "relation": {
+                "name": "classroom",
+                "targetModel": "attendance_classroom"
+              },
+              "nullable": false,
+              "unique": false
+            },
+            {
+              "name": "school_id",
+              "type": "uuid",
+              "description": "[School Reference] - FK to school. Provides option to aggregate/partition stats by institution. Required.",
+              "relation": {
+                "name": "school",
+                "targetModel": "attendance_school"
+              },
+              "nullable": false,
+              "unique": false
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "day",
+              "type": "string",
+              "nullable": false,
+              "description": "[Target Day] - The date string (YYYY-MM-DD) for this statistics row. Always atomic. For filtering/aggregation."
+            },
+            {
+              "name": "present_count",
+              "type": "int",
+              "nullable": false,
+              "description": "[Present Count] - Number of present students. Must match attendance record aggregation result. No duplication."
+            },
+            {
+              "name": "late_count",
+              "type": "int",
+              "nullable": false,
+              "description": "[Late Count] - Number of late students. Atomic, no duplication."
+            },
+            {
+              "name": "absent_count",
+              "type": "int",
+              "nullable": false,
+              "description": "[Absent Count] - Number of absentees for the day."
+            },
+            {
+              "name": "early_leave_count",
+              "type": "int",
+              "nullable": false,
+              "description": "[Early Leave Count] - Number of students with early leave (if supported), atomic and normalized."
+            },
+            {
+              "name": "created_at",
+              "type": "datetime",
+              "nullable": false,
+              "description": "[Created At Timestamp] - Row creation time (auditing)."
+            },
+            {
+              "name": "updated_at",
+              "type": "datetime",
+              "nullable": false,
+              "description": "[Updated At Timestamp] - Last modification time (auditing)."
+            }
+          ],
+          "uniqueIndexes": [
+            {
+              "fieldNames": [
+                "classroom_id",
+                "day"
+              ],
+              "unique": true,
+              "description": "Uniqueness enforced: one stat row per classroom per day."
+            }
+          ],
+          "plainIndexes": [
+            {
+              "fieldNames": [
+                "school_id",
+                "day"
+              ]
+            }
+          ],
+          "ginIndexes": []
+        },
+        {
+          "name": "attendance_stats_student_summary",
+          "description": "[Student Period Summary Stats] - Implements the requirement for summary dashboards of student-centric attendance aggregation within teacher/student and risk-detection portals.\n\nBusiness purpose: Tracks per-student attendance statistics per term/period (e.g., a semester or month). Maintains strict normalization: each record is for (student, period), not by day; never duplicates per-attendance details. Used for summary dashboards, risk analysis, student historical queries.\n\nKey relationships: FK to student (required), classroom (required).\nSpecial behaviors: Each summary is (student, period), recomputed on record changes.\n\nUsage example: Answers queries like \"student X, semester 1, present: 27, late: 2, absent: 1\" and populates risk-detection views.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[Primary Key] - Unique summary for (student, period)."
+          },
+          "foreignFields": [
+            {
+              "name": "student_id",
+              "type": "uuid",
+              "description": "[Student Reference] - FK to the student. Ensures all stats are per student. Required.",
+              "relation": {
+                "name": "student",
+                "targetModel": "attendance_student"
+              },
+              "nullable": false,
+              "unique": false
+            },
+            {
+              "name": "classroom_id",
+              "type": "uuid",
+              "description": "[Classroom Reference] - FK to the student's main classroom for the period. Required.",
+              "relation": {
+                "name": "classroom",
+                "targetModel": "attendance_classroom"
+              },
+              "nullable": false,
+              "unique": false
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "period_start",
+              "type": "string",
+              "nullable": false,
+              "description": "[Period Start Date] - First day of aggregation (YYYY-MM-DD, atomic, not nullable)."
+            },
+            {
+              "name": "period_end",
+              "type": "string",
+              "nullable": false,
+              "description": "[Period End Date] - Last day of aggregation (YYYY-MM-DD, atomic, not nullable)."
+            },
+            {
+              "name": "total_present",
+              "type": "int",
+              "nullable": false,
+              "description": "[Total Present] - Days present in period."
+            },
+            {
+              "name": "total_late",
+              "type": "int",
+              "nullable": false,
+              "description": "[Total Late] - Days late in period."
+            },
+            {
+              "name": "total_absent",
+              "type": "int",
+              "nullable": false,
+              "description": "[Total Absent] - Days absent in period."
+            },
+            {
+              "name": "total_early_leave",
+              "type": "int",
+              "nullable": false,
+              "description": "[Total Early Leave] - Days with early leave. Atomic, not nullable."
+            },
+            {
+              "name": "created_at",
+              "type": "datetime",
+              "nullable": false,
+              "description": "[Created At Timestamp] - Row creation time for provenance."
+            },
+            {
+              "name": "updated_at",
+              "type": "datetime",
+              "nullable": false,
+              "description": "[Updated At Timestamp] - Last modification time for provenance."
+            }
+          ],
+          "uniqueIndexes": [
+            {
+              "fieldNames": [
+                "student_id",
+                "period_start",
+                "period_end"
+              ],
+              "unique": true,
+              "description": "Uniqueness: one student/period summary row per period."
+            }
+          ],
+          "plainIndexes": [
+            {
+              "fieldNames": [
+                "classroom_id",
+                "period_start",
+                "period_end"
+              ]
+            }
+          ],
+          "ginIndexes": []
+        },
+        {
+          "name": "attendance_stats_classroom_summary",
+          "description": "[Classroom Period Summary Stats] - Implements the class-by-class, per-period aggregate statistics needed for power dashboards, ranking, reporting, and period-based monitoring by admin/teacher.\n\nBusiness purpose: Aggregates attendance statistics for a classroom within a fixed period (e.g. semester, month). Strict normalization: one record per (classroom, period). Powers dashboard summary tables, quick health views, or exports. No per-student duplication inside each summary.\n\nKey relationships: FK to classroom (required), school (required).\nSpecial behaviors: Each record is (classroom, period). Always recalculated from normalized records.\n\nUsage example: Allows, e.g., \"Class 1: Total 80 student-days, Present 75, Late 2, Absent 1, Early Leave 2\" over a semester.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[Primary Key] - Unique summary for (classroom, period)."
+          },
+          "foreignFields": [
+            {
+              "name": "classroom_id",
+              "type": "uuid",
+              "description": "[Classroom Reference] - FK to classroom. Required, normalizes aggregation to exact class.\n",
+              "relation": {
+                "name": "classroom",
+                "targetModel": "attendance_classroom"
+              },
+              "nullable": false,
+              "unique": false
+            },
+            {
+              "name": "school_id",
+              "type": "uuid",
+              "description": "[School Reference] - FK to school. Extra aggregation support for admin, mandatory.",
+              "relation": {
+                "name": "school",
+                "targetModel": "attendance_school"
+              },
+              "nullable": false,
+              "unique": false
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "period_start",
+              "type": "string",
+              "nullable": false,
+              "description": "[Summary Start Date] - Beginning day of summary period (YYYY-MM-DD)."
+            },
+            {
+              "name": "period_end",
+              "type": "string",
+              "nullable": false,
+              "description": "[Summary End Date] - Final day covered by this period (YYYY-MM-DD)."
+            },
+            {
+              "name": "total_present",
+              "type": "int",
+              "nullable": false,
+              "description": "[Total Present] - Present count for classroom/period."
+            },
+            {
+              "name": "total_late",
+              "type": "int",
+              "nullable": false,
+              "description": "[Total Late] - Late count for classroom/period."
+            },
+            {
+              "name": "total_absent",
+              "type": "int",
+              "nullable": false,
+              "description": "[Total Absent] - Absence count for classroom/period."
+            },
+            {
+              "name": "total_early_leave",
+              "type": "int",
+              "nullable": false,
+              "description": "[Total Early Leave] - Early leave count for class/period."
+            },
+            {
+              "name": "created_at",
+              "type": "datetime",
+              "nullable": false,
+              "description": "[Created At Timestamp] - Creation time for auditing."
+            },
+            {
+              "name": "updated_at",
+              "type": "datetime",
+              "nullable": false,
+              "description": "[Updated At Timestamp] - Modification time for auditing."
+            }
+          ],
+          "uniqueIndexes": [
+            {
+              "fieldNames": [
+                "classroom_id",
+                "period_start",
+                "period_end"
+              ],
+              "unique": true,
+              "description": "Uniqueness: only one rollup per classroom, per period."
+            }
+          ],
+          "plainIndexes": [
+            {
+              "fieldNames": [
+                "school_id",
+                "period_start",
+                "period_end"
+              ]
+            }
+          ],
+          "ginIndexes": []
+        },
+        {
+          "name": "attendance_stats_abnormal_log",
+          "description": "[Abnormal Attendance Log] - Implements anomaly detection and auditability as required for admin/teacher monitoring and reporting.\n\nBusiness purpose: Records all detected anomalies for a specific attendance record and student. 3NF: strictly FK-driven per event, never duplicates record or student Meta. Supports dashboard lists of \"problematic patterns\" (frequent absentees, suspicious codes), and audit history of handling/resolution per anomaly instance.\n\nKey relationships: FK to attendance record (required), student (required), admin (optional - who flagged/resolved event).\nSpecial behaviors: Multiple logs per attendance. Status field allows open/closed/in_review. All timestamps atomic.\n\nUsage example: Used for daily audit logs, anomaly dashboard widgets, risk analysis features.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[Primary Key] - Unique anomaly log. Each row is a single anomaly instance."
+          },
+          "foreignFields": [
+            {
+              "name": "attendance_record_id",
+              "type": "uuid",
+              "description": "[Attendance Record Reference] - FK to the atom-level attendance record that this anomaly log is attached to.",
+              "relation": {
+                "name": "record",
+                "targetModel": "attendance_attendance_record"
+              },
+              "nullable": false,
+              "unique": false
+            },
+            {
+              "name": "student_id",
+              "type": "uuid",
+              "description": "[Student Reference] - FK to student involved in anomaly.",
+              "relation": {
+                "name": "student",
+                "targetModel": "attendance_student"
+              },
+              "nullable": false,
+              "unique": false
+            },
+            {
+              "name": "admin_id",
+              "type": "uuid",
+              "description": "[Admin Reference] - FK to admin who manually tagged/resolved anomaly. Optional (nullable if anomaly unresolved or system-detected only).",
+              "relation": {
+                "name": "admin",
+                "targetModel": "attendance_admin"
+              },
+              "nullable": true,
+              "unique": false
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "anomaly_type",
+              "type": "string",
+              "nullable": false,
+              "description": "[Anomaly Type] - Label (duplicate, location_mismatch, code_invalid, etc). Required for audit/search. Normalized, not nullable."
+            },
+            {
+              "name": "anomaly_rule",
+              "type": "string",
+              "nullable": false,
+              "description": "[Detection Rule] - Mechanism/rule which detected anomaly (e.g., code reuse, location mismatch, late submission). Not nullable."
+            },
+            {
+              "name": "status",
+              "type": "string",
+              "nullable": false,
+              "description": "[Status] - Workflow: open, closed, in_review. Not nullable. (Enum enforced at business logic.)"
+            },
+            {
+              "name": "occurred_at",
+              "type": "datetime",
+              "nullable": false,
+              "description": "[Detected At] - When this anomaly was first detected. Not nullable."
+            },
+            {
+              "name": "resolved_at",
+              "type": "datetime",
+              "nullable": true,
+              "description": "[Resolved At] - When status changed to closed (nullable)."
+            },
+            {
+              "name": "created_at",
+              "type": "datetime",
+              "nullable": false,
+              "description": "[Log Created At] - Provenance/audit."
+            },
+            {
+              "name": "updated_at",
+              "type": "datetime",
+              "nullable": false,
+              "description": "[Last Updated At] - Audit trail for log changes."
+            }
+          ],
+          "uniqueIndexes": [
+            {
+              "fieldNames": [
+                "attendance_record_id",
+                "anomaly_type"
+              ],
+              "unique": true,
+              "description": "No duplicates: one anomaly type per attendance record."
+            }
+          ],
+          "plainIndexes": [
+            {
+              "fieldNames": [
+                "student_id",
+                "anomaly_type"
+              ]
+            }
+          ],
+          "ginIndexes": []
+        }
+      ]
+    },
+    {
+      "filename": "schema-06-attendance_audit_log.prisma",
+      "namespace": "AttendanceAuditLog",
+      "models": [
+        {
+          "name": "attendance_access_log",
+          "description": "[System access logs] - This implements the system access/audit trail requirement from the compliance and security section (admin/authority monitoring, user action logging) in the attendance requirement analysis.\n\nRecords all user and admin access to the attendance system for security audit, compliance, and traceability. This table stores each access event with session/user/account/classroom reference, IP, device, agent, and timestamp. Maintains strict 3NF normalization by storing only atomic log facts.\n\nFor example, used to track every time an admin or teacher accesses a dashboard, or a parent/guardian checks attendance alerts. Used for internal compliance and for audits (e.g. police, educational authorities).\n\nKey relationships: references user-type accounts, classroom (optional), and records detailed metadata of access events.\nSpecial behaviors: immutable row; never update/delete for auditability. May be large/requires archiving/partitioning for long-term retention.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[Primary key] - Implements unique identification for each access event. All access log rows have a globally unique id for audit traceability. Always in the 'id' field for normalization and reference. For example, log line ID for reviewing access history.",
+            "nullable": false
+          },
+          "foreignFields": [
+            {
+              "name": "teacher_id",
+              "type": "uuid",
+              "reference": "attendance_teacher",
+              "description": "[Teacher reference] - Links access event to teacher role, if performed by a teacher. Null if not relevant. Normalizes who performed the access for auditing by role. For example, a teacher opening the class dashboard. Nullable: admin/parent access.",
+              "nullable": true,
+              "unique": false,
+              "relation": {
+                "name": "teacher",
+                "targetModel": "attendance_teacher"
+              }
+            },
+            {
+              "name": "student_id",
+              "type": "uuid",
+              "reference": "attendance_student",
+              "description": "[Student reference] - Links access event to student, if performed by a student. Null if not relevant. Maintains normalization by only referencing, never duplicating user data. For example, a student checks their attendance log. Nullable: teacher/parent access.",
+              "nullable": true,
+              "unique": false,
+              "relation": {
+                "name": "student",
+                "targetModel": "attendance_student"
+              }
+            },
+            {
+              "name": "parent_id",
+              "type": "uuid",
+              "reference": "attendance_parent",
+              "description": "[Parent reference] - Links access event to a parent, if performed by parent/guardian. Null if not relevant. Ensures normalization and distinct role link. For example, a parent viewing notification dashboard. Nullable except for parent access.",
+              "nullable": true,
+              "unique": false,
+              "relation": {
+                "name": "parent",
+                "targetModel": "attendance_parent"
+              }
+            },
+            {
+              "name": "admin_id",
+              "type": "uuid",
+              "reference": "attendance_admin",
+              "description": "[Admin reference] - If the access was by an admin/authority. Always normalized – records only UUID, never duplicated info. Null if not relevant. For example, an admin reviewing logs. Nullable for non-admin roles.",
+              "nullable": true,
+              "unique": false,
+              "relation": {
+                "name": "admin",
+                "targetModel": "attendance_admin"
+              }
+            },
+            {
+              "name": "classroom_id",
+              "type": "uuid",
+              "reference": "attendance_classroom",
+              "description": "[Classroom reference] - Optionally links this access to a classroom context if relevant (e.g., teacher opens a class dashboard). Null if not relevant. Maintains strict normalization – never duplicating classroom data, only referencing. For example, viewing attendance for a specific class.",
+              "nullable": true,
+              "unique": false,
+              "relation": {
+                "name": "classroom",
+                "targetModel": "attendance_classroom"
+              }
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "ip_address",
+              "type": "string",
+              "description": "[IP Address] - Captures remote IP address from which the user accessed the system. Implements regulatory and audit requirements for traceability by IP. For example, used in suspicious access investigations. Maintains normalization as atomic string. Non-null.",
+              "nullable": false
+            },
+            {
+              "name": "user_agent",
+              "type": "string",
+              "description": "[User Agent] - User's browser/device client agent string at access time. For device and environment forensics/audit. Maintains normalization by storing the agent string atomically. For example, 'Mozilla/5.0...'. Non-null.",
+              "nullable": false
+            },
+            {
+              "name": "device_id",
+              "type": "string",
+              "description": "[Device ID or fingerprint] - Optionally, the device/fingerprint associated with this access action (if available). Implements device tracking/auditability. Maintains 3NF normalization by being an atomic string. Nullable: not all accesses have unique fingerprint.",
+              "nullable": true
+            },
+            {
+              "name": "accessed_at",
+              "type": "datetime",
+              "description": "[Access timestamp] - The exact timestamp of the access event, in UTC. Implements requirement for access event ordering and full audit trace. Maintains normalization (atomic datetime, non-duplicated). For example, can sort by access time for investigations. Non-null.",
+              "nullable": false
+            }
+          ],
+          "uniqueIndexes": [],
+          "plainIndexes": [
+            {
+              "fieldNames": [
+                "teacher_id",
+                "accessed_at"
+              ],
+              "description": "Query optimization for per-teacher audit trails"
+            },
+            {
+              "fieldNames": [
+                "student_id",
+                "accessed_at"
+              ],
+              "description": "Query optimization for per-student audit trails"
+            },
+            {
+              "fieldNames": [
+                "parent_id",
+                "accessed_at"
+              ],
+              "description": "For parent audit/delegation reviews"
+            },
+            {
+              "fieldNames": [
+                "admin_id",
+                "accessed_at"
+              ],
+              "description": "Auditing admin access time trends"
+            },
+            {
+              "fieldNames": [
+                "classroom_id",
+                "accessed_at"
+              ],
+              "description": "Quickly filter by classroom-time activity"
+            }
+          ],
+          "ginIndexes": []
+        },
+        {
+          "name": "attendance_audit_log",
+          "description": "[Critical action audit log] - Implements the requirement to keep a secure, normalized record of all key/sensitive actions (modifications, exports, setting changes, account modifications) as cited in admin/authority oversight in requirements.\n\nStores per-event audit logs of entity changes, policy updates, sensitive data accesses, major system exports, and more. Fully normalized (3NF); NO derived data or redundancy, all foreign keys reference atomic records (users, admin, affected classroom or record if relevant).\n\nFor example: an admin changes attendance policy, a teacher bulk-modifies attendance, an export/download of all attendance. Used for security, compliance, and incident response. NEVER stores pre-calculated or denormalized data.\n\nKey relationships: referenced user/admin/parent/teacher (action performer), classroom (if applicable), and atomic log details.\nSpecial behaviors: append-only (never updated/deleted); used for legal and regulatory audits.",
+          "material": false,
+          "primaryField": {
+            "name": "id",
+            "type": "uuid",
+            "description": "[Primary key] - Uniquely identifies every audit event. Implements atomic row identity for each action. For example, for referencing an audit trail or incident report. Non-null, strictly unique.",
+            "nullable": false
+          },
+          "foreignFields": [
+            {
+              "name": "teacher_id",
+              "type": "uuid",
+              "reference": "attendance_teacher",
+              "description": "[Teacher reference] - Actor if the action was performed by a teacher. Null otherwise. Maintains normalization, enables per-teacher audits (e.g., edits own students).",
+              "nullable": true,
+              "unique": false,
+              "relation": {
+                "name": "teacher",
+                "targetModel": "attendance_teacher"
+              }
+            },
+            {
+              "name": "student_id",
+              "type": "uuid",
+              "reference": "attendance_student",
+              "description": "[Student reference] - Actor if the event was done by a student (e.g., requests own attendance edit). Nullable for other roles/actions. Normalization enforced.",
+              "nullable": true,
+              "unique": false,
+              "relation": {
+                "name": "student",
+                "targetModel": "attendance_student"
+              }
+            },
+            {
+              "name": "parent_id",
+              "type": "uuid",
+              "reference": "attendance_parent",
+              "description": "[Parent reference] - Actor if audit event performed by parent/guardian (e.g., notification request/view). Nullable for other roles. Maintains 3NF.",
+              "nullable": true,
+              "unique": false,
+              "relation": {
+                "name": "parent",
+                "targetModel": "attendance_parent"
+              }
+            },
+            {
+              "name": "admin_id",
+              "type": "uuid",
+              "reference": "attendance_admin",
+              "description": "[Admin reference] - Used if the audit event was performed by admin/authority. Null for non-admin. Maintains normalized structure (FK linkage, role separation).",
+              "nullable": true,
+              "unique": false,
+              "relation": {
+                "name": "admin",
+                "targetModel": "attendance_admin"
+              }
+            },
+            {
+              "name": "classroom_id",
+              "type": "uuid",
+              "reference": "attendance_classroom",
+              "description": "[Classroom reference] - Links to classroom context if the event relates to a classroom (e.g., attendance export, bulk policy change). Nullable if not relevant. Normalization via FK only.",
+              "nullable": true,
+              "unique": false,
+              "relation": {
+                "name": "classroom",
+                "targetModel": "attendance_classroom"
+              }
+            }
+          ],
+          "plainFields": [
+            {
+              "name": "event_type",
+              "type": "string",
+              "description": "[Event type] - Describes the kind of action being audited: e.g. 'attendance_edit', 'policy_update', 'data_export', etc. Implements requirement for granular action logs. Fully normalized as atomic string, reinforced by documentation/examples but not enums (for extensibility). E.g.: 'policy_update', 'student_added', 'bulk_export'.",
+              "nullable": false
+            },
+            {
+              "name": "action_details",
+              "type": "string",
+              "description": "[Action details] - Atomic short/medium text description of the action performed. E.g., 'Updated attendance for 3B class 2025-07-09', or info about export/file path/policy json. Implements transparency and accountability requirement. Normalized (not JSON, not aggregate); if detailed object, store as reference elsewhere.",
+              "nullable": false
+            },
+            {
+              "name": "success",
+              "type": "boolean",
+              "description": "[Action result flag] - Indicates if the critical action completed successfully (true/false). Implements requirement to track failed attempts and all audit flows. Maintains normalization. For example, 'false' if export failed due to permission error.",
+              "nullable": false
+            },
+            {
+              "name": "failed_reason",
+              "type": "string",
+              "description": "[Failure reason] - Supplies additional description or code for failure event IF (and only if) the action failed. Nullable for success, non-null if success==false. 3NF with atomic narrative for compliance. For example, 'Permission denied'. Null if not failed.",
+              "nullable": true
+            },
+            {
+              "name": "audited_at",
+              "type": "datetime",
+              "description": "[Audit event timestamp] - Exact UTC datetime event was logged. Implements requirement for chronological forensic trail of critical actions. Maintains normalization; for example, used in timeline incident investigations.",
+              "nullable": false
+            }
+          ],
+          "uniqueIndexes": [],
+          "plainIndexes": [
+            {
+              "fieldNames": [
+                "admin_id",
+                "audited_at"
+              ],
+              "description": "Admin authority audit reviews"
+            },
+            {
+              "fieldNames": [
+                "teacher_id",
+                "audited_at"
+              ],
+              "description": "Teacher critical action queries"
+            },
+            {
+              "fieldNames": [
+                "parent_id",
+                "audited_at"
+              ],
+              "description": "Parent-side audit review"
+            },
+            {
+              "fieldNames": [
+                "event_type",
+                "audited_at"
+              ],
+              "description": "Action/event type filtering for security dashboard"
             }
           ],
           "ginIndexes": []

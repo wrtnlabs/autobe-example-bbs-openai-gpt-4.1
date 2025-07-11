@@ -1,0 +1,183 @@
+/// Attendance Record - This implements tracking each student's attendance submission for all required classes/sessions, fulfilling the requirement for verifiable and auditable attendance management as described in the documentation (see attendance check flow, teacher dashboard requirements).
+///
+/// This table maintains a normalized, atomic log of all individual attendance checks, each with explicit references to students, teachers, classrooms, and attendance codes (if code-based). 3NF is upheld by ensuring all non-key attributes are fully dependent on the attendance record's identity, with no derived or calculated data. Example: Each submission (present, late, absent, leave) with its metadata and linked code is recorded here for query, audit, and reporting.
+///
+/// Key relationships: Links to students (attendance_student), classes (attendance_classroom), teachers (attendance_teacher), attendance methods (attendance_attendance_method), and attendance codes (attendance_attendance_code, optional).
+/// Special behaviors: All changes (corrections, exceptions) result in a new record or a state change, never mutation in place. No duplicate attendance for the same student/session is allowed (enforced by unique index).
+///
+/// @namespace Attendance
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_attendance_record {
+  //----
+  // COLUMNS
+  //----
+  /// Unique primary key for each attendance record entry. Implements requirement for uniqueness and auditability. Atomic and canonical - no semantic meaning. Example: Used as main reference in logs/audit.
+  id String @id @db.Uuid
+  
+  /// Linked attendance_student.id - Which student this record represents. Fulfills the need to query per-student attendance for dashboards, parent notifications, etc. Maintains 3NF by using atomic FK. Always required.
+  student_id String @db.Uuid
+  
+  /// Linked attendance_classroom.id - The class/lesson this attendance is for. Implements requirement to support per-class reporting and entrance filtering. Maintains normalized relationships.
+  classroom_id String @db.Uuid
+  
+  /// Linked attendance_teacher.id - Teacher responsible for the attendance check. Needed for audit trails, permission checks, dashboard. Maintains normalized structure.
+  teacher_id String @db.Uuid
+  
+  /// Linked attendance_attendance_method.id - The method the student used to check attendance (code, QR, manual, API, etc.), realizing the system's need to track how attendance was registered. Required, normalized to support method lookups and stats.
+  method_id String @db.Uuid
+  
+  /// Linked attendance_attendance_code.id (Nullable) - If attendance was submitted using a code, this references the code used, fulfilling the audit and fraud prevention requirement. Optional as not all sessions may use code-based attendance.
+  code_id String? @db.Uuid
+  
+  /// The timestamp when the student checked in (local TZ). Implements need for audit, lateness/absence resolution. Normalized and atomic. Example: Used for attendance time window checks.
+  checked_at DateTime @db.Timestamptz
+  
+  /// Attendance status (e.g., present, late, absent, leave). Implements the business need for granular tracking. Normalized - valid options constrained via application/business layer. Example: 'present', 'late'.
+  status String
+  
+  /// Free text; optional reason for abnormal status (if any). Ex: "Sick leave note from parent". Implements exception tracking requirement as per teacher/admin needs. 3NF: No encoding, just atomic explanatory string.
+  exception_reason String?
+  
+  //----
+  // RELATIONS
+  //----
+  attendance_attendance_record_student_id_fkey attendance_student @relation(fields: [student_id], references: [id], onDelete: Cascade)
+  attendance_attendance_record_classroom_id_fkey attendance_classroom @relation(fields: [classroom_id], references: [id], onDelete: Cascade)
+  attendance_attendance_record_teacher_id_fkey attendance_teacher @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  attendance_attendance_record_method_id_fkey attendance_attendance_method @relation(fields: [method_id], references: [id], onDelete: Cascade)
+  attendance_attendance_record_code_id_fkey attendance_attendance_code? @relation(fields: [code_id], references: [id], onDelete: Cascade)
+  
+  attendance_notification attendance_notification[]
+  attendance_stats_abnormal_log attendance_stats_abnormal_log[]
+  
+  @@index([classroom_id])
+  @@index([teacher_id])
+  @@index([method_id])
+  @@index([code_id])
+  
+  @@unique([student_id, classroom_id, checked_at])
+  @@index([status, checked_at])
+}
+
+/// Attendance Code - This table realizes the requirement for randomly generated, per-session attendance codes to be distributed by teachers and used by students (see attendance check flow and code-based authentication requirement).
+///
+/// Fully normalized: each code record is atomic, generated for only one classroom & session, no extra calculated fields. For example, prevents code reuse and enables auditability.
+///
+/// Key relationships: Linked to classroom (attendance_classroom), teacher (attendance_teacher). Snapshots/audit handled via code log table.
+///
+/// @namespace Attendance
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_attendance_code {
+  //----
+  // COLUMNS
+  //----
+  /// Primary key. Uniquely identifies each attendance code generated. Atomic, normalized (no semantic encoding).
+  id String @id @db.Uuid
+  
+  /// FK to attendance_classroom. The class this code is issued for. Required for context, per requirements (teacher dashboard, stats). 3NF compliance: atomic value.
+  classroom_id String @db.Uuid
+  
+  /// FK to attendance_teacher. Teacher who created this code. Needed for audit and fraud prevention (and per teacher dashboard). 3NF by reference.
+  teacher_id String @db.Uuid
+  
+  /// Attendance code value (e.g., 'K8F9Z4'). Implements the actual code distributed to students. Constrained at application level (capital alphanum, fixed length per requirement). 3NF - no encoding, atomic.
+  code_value String
+  
+  /// Issuing time (when created by teacher/dash/API). Needed for audit, stats dashboard, validation window. Example: Used for checking code validity period.
+  issued_at DateTime @db.Timestamptz
+  
+  /// Timestamp when this code expires and becomes invalid. Business-driven requirement for fraud/liability. No calculation here (which is done at app/backend level).
+  expires_at DateTime @db.Timestamptz
+  
+  /// Flag set true if code is currently valid, false if expired or revoked. Implements business logic of code lifecycle.
+  is_active Boolean
+  
+  //----
+  // RELATIONS
+  //----
+  attendance_attendance_code_classroom_id_fkey attendance_classroom @relation(fields: [classroom_id], references: [id], onDelete: Cascade)
+  attendance_attendance_code_teacher_id_fkey attendance_teacher @relation(fields: [teacher_id], references: [id], onDelete: Cascade)
+  
+  attendance_attendance_record attendance_attendance_record[]
+  attendance_attendance_code_log attendance_attendance_code_log[]
+  
+  @@index([teacher_id])
+  
+  @@unique([classroom_id, code_value, is_active])
+  @@index([issued_at, expires_at])
+}
+
+/// Attendance Code Log - Implements the audit/snapshot pattern for attendance code creation and usage. Required for both technical and legal audit (who made, who used, when, and from where), per system requirements for auditability, fraud tracing, and compliance.
+///
+/// Each entry is atomic, attached to a specific attendance code. 3NF compliance ensured by FK and atomic fields; all calculated/aggregated data in materialized view tables only.
+///
+/// Key relationships: Linked to the attendance_attendance_code it logs.
+///
+/// Special behavior: Immutable log. New record per event.
+/// Example usage: Logging all access, creation, use attempts, and state changes to code (issued, used, expired, revoked, etc.).
+///
+/// @namespace Attendance
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_attendance_code_log {
+  //----
+  // COLUMNS
+  //----
+  /// Primary key. Uniquely identifies each code log event. Enables chronological and entity-specific log queries. Atomic pointer.
+  id String @id @db.Uuid
+  
+  /// FK to attendance_attendance_code. Exactly which code this event is related to. 3NF: Only FK, no encoding.
+  code_id String @db.Uuid
+  
+  /// Event type (issued, used, expired, revoked, failure, etc.). Implements business need for distinguishing code lifecycle and possible abnormal usage. Normalized and atomic.
+  event_type String
+  
+  /// Timestamp for when this event occurred (code creation/use/expire). Needed for indisputable audit. 3NF: atomic time point.
+  event_time DateTime @db.Timestamptz
+  
+  /// UUID of the actor who triggered the event (could be teacher, student, system). Implements actor traceability per audit requirement. Cast/foreign key checks managed at application level, since polymorphic.
+  actor_id String? @db.Uuid
+  
+  /// Who or what type initiated (teacher, student, admin, system process). Required for full trace. 3NF. Example: 'student'.
+  actor_type String
+  
+  /// Optional free text for contextual event note (e.g.: IP, device info, error trace). Useful for advanced audit/troubleshooting. Null when none.
+  details String?
+  
+  //----
+  // RELATIONS
+  //----
+  attendance_attendance_code_log_code_id_fkey attendance_attendance_code @relation(fields: [code_id], references: [id], onDelete: Cascade)
+  
+  @@index([code_id, event_time])
+}
+
+/// Attendance Method Master - Implements the normalization of all possible mechanisms by which attendance is recorded, per the requirements to enable dynamic addition/processing of new attendance types without disrupting the core data model and for analytics (teacher dashboard, admin stats).
+///
+/// This is a static/master data table holding the canonical list of valid attendance check methods (e.g., code input, QR scan, manual teacher entry, API, NFC). 3NF: only atomic fields.
+///
+/// Key relationships: Referenced from attendance_attendance_record for query, UI, and analytics.
+/// Special behaviors: Application layer manages allowed method list and expansion.
+/// Example: Used to normalize 'method_id' in other tables.
+///
+/// @namespace Attendance
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_attendance_method {
+  //----
+  // COLUMNS
+  //----
+  /// PK. Canonical ID of the method. Ensures normalization & referential integrity.
+  id String @id @db.Uuid
+  
+  /// Display label / code for method (e.g. "CODE", "QR", "MANUAL"). Atomic value fulfilling 3NF. Used in UI/config. Example usage: show available methods in teacher dashboard.
+  method_name String
+  
+  /// Explanation of what this method means or how it works. Fulfills need for self-described method catalog/master table. Example: '6-digit random code input by student on web/mobile.'
+  description String
+  
+  //----
+  // RELATIONS
+  //----
+  attendance_attendance_record attendance_attendance_record[]
+  
+  @@unique([method_name])
+}

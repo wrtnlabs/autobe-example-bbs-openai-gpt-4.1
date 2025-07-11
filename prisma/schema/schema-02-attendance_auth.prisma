@@ -1,0 +1,129 @@
+/// [OAuth2/Social Account Mapping] - This implements the social login integration requirement from the requirements analysis (see '소셜 로그인 및 사용자 역할별 이용 흐름', '07_attendance_auth_social_login.md').
+///
+/// Handles external identity linkage (Google, Naver, etc.) with strict separation from core attendance/role tables. Maintains full 3NF by storing only atomic fields, no denormalized or computed values. 
+///
+/// For example, when a student logs in with a Google or Naver account, the external provider/user key and internal auth user are mapped here.
+///
+/// Key relationships: Must be connected to attendance_auth_account via auth_account_id. There is no direct connection to role-specific tables (teacher/student/parent/admin) for normalization. Special behaviors: Each (provider, social_id) pair is globally unique, and each auth_account_id may have multiple social accounts for cross-platform linking.
+///
+/// @namespace AttendanceAuth
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_social_account {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary Key] - Implements the requirement for system-wide unique identification. Uniquely identifies a single social account link. Atomic, non-derivable, auto-generated UUID.
+  id String @id @db.Uuid
+  
+  /// [Authentication Account FK] - Links to the local core authentication account that this social account is mapped to. Ensures strict 3NF, never storing redundant user data.
+  auth_account_id String @db.Uuid
+  
+  /// [Social Provider Name] - Implements the '인증 제공자 종류' requirement. Stores provider key (e.g. 'google', 'naver', 'kakao'). Only atomic provider keys, never human readable names.
+  provider String
+  
+  /// [Provider-side User ID] - The unique identity issued by the external provider. Implements the external identity mapping requirement without redundancy, strictly atomic.
+  social_id String
+  
+  /// [Linkage Timestamp] - Records the link creation UTC time (membership via social account). For evidence, never update or delete, only append new link if needed.
+  created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  attendance_social_account_auth_account_id attendance_auth_account @relation(fields: [auth_account_id], references: [id], onDelete: Cascade)
+  
+  @@unique([provider, social_id])
+  @@index([auth_account_id])
+}
+
+/// [Authentication Account] - This implements core authentication/account management from multiple requirements (see '소셜 로그인 및 인증 연동 설계', '07_attendance_auth_social_login.md').
+///
+/// Purpose: Represents a single login identity, potentially linked to one or more user roles (student/teacher/parent/admin) but is not itself a 'user' table. Stays in full 3NF by not containing denormalized role or profile data. For example, a parent may have multiple social logins mapped in attendance_social_account but still have one core login account here.
+///
+/// Key relationships: Links to role-specific tables (attendance_teacher, attendance_student, attendance_parent, attendance_admin) via FKs FROM those tables, never the other way. Special behaviors: Email is only used for communication/identification if local login is supported. Soft deletion via deleted_at, never hard delete.
+///
+/// @namespace AttendanceAuth
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_auth_account {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary Key] - Implements unique identity across all authentication schemas.
+  id String @id @db.Uuid
+  
+  /// [Email] - Optional field for local auth/notification. Must be unique if specified. Null for pure social logins.
+  email String?
+  
+  /// [Password Hash] - Implements local account login. Null for accounts only using social login. Always store hashed, never cleartext.
+  password_hash String?
+  
+  /// [Creation Timestamp] - When the authentication account was created. Never updated.
+  created_at DateTime @db.Timestamptz
+  
+  /// [Last Updated Time] - For profile info or recovery. Update whenever account details change. For evidence/audit.
+  updated_at DateTime @db.Timestamptz
+  
+  /// [Soft Delete Marker] - When account is deactivated/marked deleted. Null = active; non-null = no login permitted. Keeps history for audit evidence.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  attendance_teacher attendance_teacher?
+  attendance_student attendance_student?
+  attendance_parent attendance_parent?
+  attendance_admin attendance_admin?
+  attendance_social_account attendance_social_account[]
+  attendance_auth_session attendance_auth_session[]
+  
+  @@unique([email])
+  @@index([created_at])
+}
+
+/// [Session Token Management] - This implements OAuth2 session/static/token management (see 'API 인증 및 권한', '08_attendance_api_design.md').
+///
+/// Purpose: Tracks live/issued authentication sessions (JWTs, scopes, expiration). 3NF by not including calculated/denormalized fields (e.g. profile email, role, permissions).
+///
+/// For example, upon login, a session token is issued and tracked here, with linkage to auth_account_id. Used for forced invalidation or JWT refresh flows.
+///
+/// Key relationships: Linked to attendance_auth_account via FK, for query of active/inactive sessions per account. Special behaviors: On logoff, session is marked as revoked_at instead of hard deletion for audit chain. 
+///
+///
+/// @namespace AttendanceAuth
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model attendance_auth_session {
+  //----
+  // COLUMNS
+  //----
+  /// [Primary Key] - Unique identifier of the auth session. Required for linking sessions for audit purposes, strict 3NF; atomic.
+  id String @id @db.Uuid
+  
+  /// [FK: Auth Account] - Links session to login identity. For example, querying all sessions for a given account. Not unique (1:N).
+  auth_account_id String @db.Uuid
+  
+  /// [Session Token] - Persisted JWT or opaque token. Atomic and strictly not reused in multiple records. Never denormalized profile or calculated data.
+  session_token String
+  
+  /// [Issue Time] - UTC creation of the session. Never updated.
+  issued_at DateTime @db.Timestamptz
+  
+  /// [Expire Time] - When the token or session is no longer valid. Value set according to OAuth2 flow. Never calculated in table, only stored.
+  expires_at DateTime @db.Timestamptz
+  
+  /// [Revoke Time] - Non-null when session is explicitly ended (logout, forced expire, etc.). Null means active session. Do not delete for audit.
+  revoked_at DateTime? @db.Timestamptz
+  
+  /// [User Agent Info] - Optional: Stores string identifying device or client info for session context. Useful for audit. 3NF compliant, atomic field only.
+  user_agent String?
+  
+  /// [IP Address] - Optional: Source IP of session creation. Needed for anomaly detection, audit. Never stores other calculated network info.
+  ip_address String?
+  
+  //----
+  // RELATIONS
+  //----
+  attendance_auth_session_auth_account_id attendance_auth_account @relation(fields: [auth_account_id], references: [id], onDelete: Cascade)
+  
+  @@unique([session_token])
+  @@index([auth_account_id, issued_at])
+}
