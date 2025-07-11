@@ -3,13 +3,11 @@ generator client {
   previewFeatures = ["postgresqlExtensions", "views"]
   binaryTargets   = ["native"]
 }
-
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
   extensions = []
 }
-
 generator markdown {
   provider = "prisma-markdown"
   output   = "../docs/ERD.md"

@@ -1,64 +1,58 @@
 import { Module } from "@nestjs/common";
 
-import { CoreUsersController } from "./controllers/core/users/CoreUsersController";
-import { CoreUserprofilesController } from "./controllers/core/userProfiles/CoreUserprofilesController";
-import { CoreRolesController } from "./controllers/core/roles/CoreRolesController";
-import { CoreRoleassignmentsController } from "./controllers/core/roleAssignments/CoreRoleassignmentsController";
-import { CoreOrganizationsController } from "./controllers/core/organizations/CoreOrganizationsController";
-import { ThreadspostsThreadsController } from "./controllers/threadsPosts/threads/ThreadspostsThreadsController";
-import { ThreadspostsPostsController } from "./controllers/threadsPosts/posts/ThreadspostsPostsController";
-import { ThreadspostsPosteditsController } from "./controllers/threadsPosts/postEdits/ThreadspostsPosteditsController";
-import { ThreadspostsPostvotesController } from "./controllers/threadsPosts/postVotes/ThreadspostsPostvotesController";
-import { ThreadspostsPollsController } from "./controllers/threadsPosts/polls/ThreadspostsPollsController";
-import { ThreadspostsPolloptionsController } from "./controllers/threadsPosts/pollOptions/ThreadspostsPolloptionsController";
-import { ThreadspostsPollvotesController } from "./controllers/threadsPosts/pollVotes/ThreadspostsPollvotesController";
-import { CommentsCommentsController } from "./controllers/comments/comments/CommentsCommentsController";
-import { CommentsCommenteditsController } from "./controllers/comments/commentEdits/CommentsCommenteditsController";
-import { CommentsCommentvotesController } from "./controllers/comments/commentVotes/CommentsCommentvotesController";
-import { ModerationModerationlogsController } from "./controllers/moderation/moderationLogs/ModerationModerationlogsController";
-import { ModerationPostreportsController } from "./controllers/moderation/postReports/ModerationPostreportsController";
-import { ModerationCommentreportsController } from "./controllers/moderation/commentReports/ModerationCommentreportsController";
-import { ModerationUserwarningsController } from "./controllers/moderation/userWarnings/ModerationUserwarningsController";
-import { ModerationSuspensionsController } from "./controllers/moderation/suspensions/ModerationSuspensionsController";
-import { ModerationBansController } from "./controllers/moderation/bans/ModerationBansController";
-import { NotificationsNotificationsController } from "./controllers/notifications/notifications/NotificationsNotificationsController";
-import { NotificationsNotificationpreferencesController } from "./controllers/notifications/notificationPreferences/NotificationsNotificationpreferencesController";
-import { CategoriestagsCategoriesController } from "./controllers/categoriesTags/categories/CategoriestagsCategoriesController";
-import { CategoriestagsTagsController } from "./controllers/categoriesTags/tags/CategoriestagsTagsController";
-import { CategoriestagsThreadtagsController } from "./controllers/categoriesTags/threadTags/CategoriestagsThreadtagsController";
-import { SettingsSitesettingsController } from "./controllers/settings/siteSettings/SettingsSitesettingsController";
-import { SettingsUsersettingsController } from "./controllers/settings/userSettings/SettingsUsersettingsController";
+import { DiscussionboardUsersController } from "./controllers/discussionBoard/users/DiscussionboardUsersController";
+import { DiscussionboardUserprofilesController } from "./controllers/discussionBoard/userProfiles/DiscussionboardUserprofilesController";
+import { DiscussionboardRoleassignmentsController } from "./controllers/discussionBoard/roleAssignments/DiscussionboardRoleassignmentsController";
+import { DiscussionboardAdminsController } from "./controllers/discussionBoard/admins/DiscussionboardAdminsController";
+import { DiscussionboardModeratorsController } from "./controllers/discussionBoard/moderators/DiscussionboardModeratorsController";
+import { DiscussionboardGuestsController } from "./controllers/discussionBoard/guests/DiscussionboardGuestsController";
+import { DiscussionboardForumcategoriesController } from "./controllers/discussionBoard/forumCategories/DiscussionboardForumcategoriesController";
+import { DiscussionboardForumsubcategoriesController } from "./controllers/discussionBoard/forumSubcategories/DiscussionboardForumsubcategoriesController";
+import { DiscussionboardThreadsController } from "./controllers/discussionBoard/threads/DiscussionboardThreadsController";
+import { DiscussionboardPostsController } from "./controllers/discussionBoard/posts/DiscussionboardPostsController";
+import { DiscussionboardThreadtagsController } from "./controllers/discussionBoard/threadTags/DiscussionboardThreadtagsController";
+import { DiscussionboardForumcategorysnapshotsController } from "./controllers/discussionBoard/forumCategorySnapshots/DiscussionboardForumcategorysnapshotsController";
+import { DiscussionboardForumsubcategorysnapshotsController } from "./controllers/discussionBoard/forumSubcategorySnapshots/DiscussionboardForumsubcategorysnapshotsController";
+import { DiscussionboardCommentsController } from "./controllers/discussionBoard/comments/DiscussionboardCommentsController";
+import { DiscussionboardCommentrepliesController } from "./controllers/discussionBoard/commentReplies/DiscussionboardCommentrepliesController";
+import { DiscussionboardPostvotesController } from "./controllers/discussionBoard/postVotes/DiscussionboardPostvotesController";
+import { DiscussionboardCommentvotesController } from "./controllers/discussionBoard/commentVotes/DiscussionboardCommentvotesController";
+import { DiscussionboardReportsController } from "./controllers/discussionBoard/reports/DiscussionboardReportsController";
+import { DiscussionboardModerationactionsController } from "./controllers/discussionBoard/moderationActions/DiscussionboardModerationactionsController";
+import { DiscussionboardWarningsController } from "./controllers/discussionBoard/warnings/DiscussionboardWarningsController";
+import { DiscussionboardUserbansController } from "./controllers/discussionBoard/userBans/DiscussionboardUserbansController";
+import { DiscussionboardNotificationsController } from "./controllers/discussionBoard/notifications/DiscussionboardNotificationsController";
+import { DiscussionboardUsersettingsController } from "./controllers/discussionBoard/userSettings/DiscussionboardUsersettingsController";
+import { DiscussionboardAttachmentsController } from "./controllers/discussionBoard/attachments/DiscussionboardAttachmentsController";
+import { DiscussionboardPostattachmentlinksController } from "./controllers/discussionBoard/postAttachmentLinks/DiscussionboardPostattachmentlinksController";
 
 @Module({
   controllers: [
-    CoreUsersController,
-    CoreUserprofilesController,
-    CoreRolesController,
-    CoreRoleassignmentsController,
-    CoreOrganizationsController,
-    ThreadspostsThreadsController,
-    ThreadspostsPostsController,
-    ThreadspostsPosteditsController,
-    ThreadspostsPostvotesController,
-    ThreadspostsPollsController,
-    ThreadspostsPolloptionsController,
-    ThreadspostsPollvotesController,
-    CommentsCommentsController,
-    CommentsCommenteditsController,
-    CommentsCommentvotesController,
-    ModerationModerationlogsController,
-    ModerationPostreportsController,
-    ModerationCommentreportsController,
-    ModerationUserwarningsController,
-    ModerationSuspensionsController,
-    ModerationBansController,
-    NotificationsNotificationsController,
-    NotificationsNotificationpreferencesController,
-    CategoriestagsCategoriesController,
-    CategoriestagsTagsController,
-    CategoriestagsThreadtagsController,
-    SettingsSitesettingsController,
-    SettingsUsersettingsController,
+    DiscussionboardUsersController,
+    DiscussionboardUserprofilesController,
+    DiscussionboardRoleassignmentsController,
+    DiscussionboardAdminsController,
+    DiscussionboardModeratorsController,
+    DiscussionboardGuestsController,
+    DiscussionboardForumcategoriesController,
+    DiscussionboardForumsubcategoriesController,
+    DiscussionboardThreadsController,
+    DiscussionboardPostsController,
+    DiscussionboardThreadtagsController,
+    DiscussionboardForumcategorysnapshotsController,
+    DiscussionboardForumsubcategorysnapshotsController,
+    DiscussionboardCommentsController,
+    DiscussionboardCommentrepliesController,
+    DiscussionboardPostvotesController,
+    DiscussionboardCommentvotesController,
+    DiscussionboardReportsController,
+    DiscussionboardModerationactionsController,
+    DiscussionboardWarningsController,
+    DiscussionboardUserbansController,
+    DiscussionboardNotificationsController,
+    DiscussionboardUsersettingsController,
+    DiscussionboardAttachmentsController,
+    DiscussionboardPostattachmentlinksController,
   ],
 })
 export class MyModule {}

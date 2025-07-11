@@ -2,78 +2,49 @@ import { tags } from "typia";
 
 export namespace IPage {
   /**
-   * 모든 리스트 API에 사용되는 공통 페이지 요청 구조체.
+   * 페이지네이션 정보입니다. 현재 페이지, 해당 쿼리의 limit, 전체 레코드 수, 계산된 전체 페이지 수 등 제공합니다.
    *
-   * Page(페이지 번호), limit(페이지 크기) 입력.
-   *
-   * 기본값은 page=1, limit=100.
-   */
-  export type IRequest = {
-    /** 페이지 번호(1~n). */
-    page?: number &
-      tags.Type<"int32"> &
-      tags.JsonSchemaPlugin<{
-        format: "int32";
-      }>;
-
-    /** 한 페이지당 최대 레코드 개수. 기본 100. */
-    limit?: number &
-      tags.Type<"int32"> &
-      tags.JsonSchemaPlugin<{
-        format: "int32";
-      }>;
-  };
-
-  /**
-   * Pagination information object for paged list responses.
-   *
-   * Standardized for IPage<T> containers across all entities, provides
-   * metadata for page navigation and display.
+   * Prisma 스키마에 의한 표준 IPage 구조를 따릅니다.
    */
   export type IPagination = {
-    /**
-     * Current page number of the result set.
-     *
-     * Default is 1, increments with deeper paging.
-     */
     current: number &
       tags.Type<"int32"> &
       tags.JsonSchemaPlugin<{
         format: "uint32";
       }>;
 
-    /**
-     * Number of records returned per page, settable by client or defaulted
-     * by API (e.g., 100).
-     *
-     * Used for UI/UX to scale list responses.
-     */
+    /** 페이지당 최대 레코드 수. 디폴트 100 */
     limit: number &
       tags.Type<"int32"> &
       tags.JsonSchemaPlugin<{
         format: "uint32";
       }>;
 
-    /**
-     * Total record count (before pagination).
-     *
-     * Used to calculate total pages and display record ranges in the UI.
-     */
+    /** 전체 레코드 수(조건 적용 후) */
     records: number &
       tags.Type<"int32"> &
       tags.JsonSchemaPlugin<{
         format: "uint32";
       }>;
 
-    /**
-     * Total number of pages available in the result set.
-     *
-     * Calculated from record and limit count, ceiling applied as needed.
-     */
+    /** 전체 페이지 수. records/limit 올림 */
     pages: number &
       tags.Type<"int32"> &
       tags.JsonSchemaPlugin<{
         format: "uint32";
       }>;
+  };
+
+  /**
+   * 페이지네이션 및 리스트 요청용 표준 타입.
+   *
+   * 다수 리소스의 검색, 필터, 페이지 정보 바디에 활용.
+   */
+  export type IRequest = {
+    /** 목록 요청시 페이지 번호. 1 이상 정수. (기본값 1) */
+    page?: (number & tags.Type<"int32">) | null;
+
+    /** 페이지당 레코드 개수(최대값 제한 필요). 기본값 100. */
+    limit?: (number & tags.Type<"int32">) | null;
   };
 }

@@ -1,0 +1,315 @@
+/// Forum Categories - This implements the requirement for organizing the discussion board into major topics (see Requirements Analysis: 'Discussion Board Structure'). 
+///
+/// Business purpose: Provides high-level grouping for all threads, such as 'Global Politics' or 'National Economy', fostering content discoverability and topic-focused discussions. Maintains 3NF normalization by only storing atomic category data and not duplicating subcategory/thread details here. For example, 'Economics' or 'International Relations' as discrete categories.
+///
+/// Key relationships: References subcategories and, indirectly, threads via subcategories.
+/// Special behaviors: Unique category name enforced, cannot be deleted if any subcategories exist.
+///
+/// @namespace ForumStructure
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_forum_category {
+  //----
+  // COLUMNS
+  //----
+  /// Primary key for the forum category - Implements unique identification for each category. Guarantees entity uniqueness and referential integrity.
+  id String @id @db.Uuid
+  
+  /// Category name - Implements naming requirement for clear topic organization. Business meaning: the display name of the forum category (e.g., 'International Politics'). Ensures normalization by preventing redundancy; this is not duplicated elsewhere. Example usage: navigation menus, filters. Unique constraint applies.
+  name String
+  
+  /// Category description - Implements display and discoverability requirements. Business meaning: short summary shown on category landing pages. Keeps all descriptive text atomic per category. Example: 'Discussions about international political events.'
+  description String?
+  
+  /// Creation timestamp - Implements audit trail for when the category was created. Used for ordering or analytics, always atomic.
+  created_at DateTime @db.Timestamptz
+  
+  /// Last update timestamp - Tracks when category details were modified. Supports history/audit without duplicating state elsewhere.
+  updated_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  discussion_board_forum_subcategory discussion_board_forum_subcategory[]
+  discussion_board_forum_category_snapshot discussion_board_forum_category_snapshot[]
+  
+  @@unique([name])
+  @@index([created_at])
+}
+
+/// Forum Subcategories - Implements the requirement for organizing forums into specific subtopics (see Requirements Analysis: 'Discussion Board Structure'). 
+///
+/// Business purpose: Allows finer content filtering within major topics, such as 'East Asian Affairs' under the 'Global Politics' category.
+/// Maintains 3NF normalization by storing atomic subcategory data and referencing parent category via foreign key.
+///
+/// Usage example: Users browse 'US Economy' under parent 'National Economy'.
+/// Key relationships: Belongs to one category, has many threads.
+/// Special behaviors: Unique (category_id, name) constraint, deletion blocked if threads exist.
+///
+/// @namespace ForumStructure
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_forum_subcategory {
+  //----
+  // COLUMNS
+  //----
+  /// Primary key for the forum subcategory - Uniquely identifies each subcategory. Supports relational integrity with threads and categories.
+  id String @id @db.Uuid
+  
+  /// Foreign key to parent discussion_board_forum_category - Models subcategory-to-category relationship (M:1). Enforces subcategories always belong to a category. Reference integrity required.
+  forum_category_id String @db.Uuid
+  
+  /// Subcategory name - Atomic label for filtering and display. Example: 'Fiscal Policy'.
+  name String
+  
+  /// Subcategory description for UI and search. Atomic, optional. Example: 'Discussions on government spending.'
+  description String?
+  
+  /// Timestamp of subcategory creation for audit and display.
+  created_at DateTime @db.Timestamptz
+  
+  /// Timestamp of last updates for the subcategory.
+  updated_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  forum_category discussion_board_forum_category @relation(fields: [forum_category_id], references: [id], onDelete: Cascade)
+  
+  discussion_board_thread discussion_board_thread[]
+  discussion_board_forum_subcategory_snapshot discussion_board_forum_subcategory_snapshot[]
+  
+  @@unique([forum_category_id, name])
+  @@index([forum_category_id])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// Discussion Threads - This implements the requirement for organizing conversations within subcategories (Requirements Analysis: 'Discussion Board Structure', 'Posting and Replies').
+///
+/// Business purpose: Stores the root entity for discussion chains. Maintains 3NF by keeping thread-specific atomic data and relating to subcategory and author.
+///
+/// Usage: 'Are tariffs helping?' thread in 'Trade Policy'.
+/// Key relationships: Belongs to a subcategory; has many posts and participants.
+/// Special behaviors: Title must be unique within subcategory, author cannot be null, soft delete by nullable deleted_at.
+///
+/// @namespace ForumStructure
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_thread {
+  //----
+  // COLUMNS
+  //----
+  /// Thread primary key - Unique identity for conversations. Prevents duplication and supports referencing in posts, tags, notifications.
+  id String @id @db.Uuid
+  
+  /// Foreign key to parent subcategory - Implements parent-child relationship, enforcing thread grouping. Required.
+  forum_subcategory_id String @db.Uuid
+  
+  /// FK to user who created the thread (discussion_board_user) - Ensures each thread has an author; supports audit trail and permissions.
+  author_id String @db.Uuid
+  
+  /// Thread title - Implements clear navigation and search features. Must be atomic; no calculated summaries. Example: 'What drives inflation?'.
+  title String
+  
+  /// Thread creation timestamp - For sorting and audit, atomic per thread.
+  created_at DateTime @db.Timestamptz
+  
+  /// Last edited timestamp.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft delete timestamp - Nullable. If set, thread is hidden but retained for potential recovery and moderation review.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  forum_subcategory discussion_board_forum_subcategory @relation(fields: [forum_subcategory_id], references: [id], onDelete: Cascade)
+  author discussion_board_user @relation(fields: [author_id], references: [id], onDelete: Cascade)
+  
+  discussion_board_post discussion_board_post[]
+  
+  @@unique([forum_subcategory_id, title])
+  @@index([author_id, created_at])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// Posts (Thread Starters and Replies) - Implements Requirements Analysis 'Posting and Replies', supporting new topics and detailed contributions.
+///
+/// Business purpose: The core content unit, either as thread starter (original post) or reply to an existing thread. Maintains normalization: each post contains only atomic content data, references the thread and its author, and optionally a parent_post for hierarchical replies (threaded discussions). No summary/aggregates are stored here—must use a materialized view for those.
+///
+/// Usage: A detailed argument about tax policy, appearing as a reply in a thread.
+/// Key relationships: Each post belongs to a thread, is authored by a user, may reference a parent post.
+/// Special behaviors: Soft-deletion via deleted_at, supports threaded structure through parent_post_id (nullable).
+///
+/// @namespace ForumStructure
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_post {
+  //----
+  // COLUMNS
+  //----
+  /// Post primary key - Uniquely identifies this contribution in the board. Enables referential integrity with votes/comments/etc.
+  id String @id @db.Uuid
+  
+  /// FK to discussion_board_thread - Each post bound to a particular discussion thread.
+  thread_id String @db.Uuid
+  
+  /// FK to discussion_board_user - User who wrote the post.
+  author_id String @db.Uuid
+  
+  /// Self-referential FK for threaded replies - Optional; allows hierarchical reply trees.
+  parent_post_id String? @db.Uuid
+  
+  /// Post content body - Implements the full rich text for the user's contribution. Atomic, not summarized, not calculated. E.g., original submission or reply.
+  content String
+  
+  /// Post creation time - Supports audit and display ordering.
+  created_at DateTime @db.Timestamptz
+  
+  /// Last modification timestamp.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft delete timestamp for moderation; nullable.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  thread discussion_board_thread @relation(fields: [thread_id], references: [id], onDelete: Cascade)
+  author discussion_board_user @relation(fields: [author_id], references: [id], onDelete: Cascade)
+  parent_post discussion_board_post? @relation("recursive", fields: [parent_post_id], references: [id], onDelete: Cascade)
+  
+  recursive discussion_board_post[] @relation("recursive")
+  discussion_board_comment discussion_board_comment[]
+  discussion_board_post_vote discussion_board_post_vote[]
+  discussion_board_report discussion_board_report[]
+  discussion_board_moderation_action discussion_board_moderation_action[]
+  discussion_board_post_attachment_link discussion_board_post_attachment_link[]
+  
+  @@index([parent_post_id])
+  
+  @@index([thread_id, created_at])
+  @@index([author_id, created_at])
+  @@index([content(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// Thread Tags - Implements Requirements Analysis ('Tagging & Categorization') for improved topic filtering and discoverability.
+///
+/// Business purpose: Stores atomic tag labels and enables M:N assignment of tags to threads through a separate junction table (not defined here). 3NF compliance maintained—tags have no computed relations.
+///
+/// Usage: Tags like 'elections', 'macroeconomics'.
+/// Key relationships: Used in thread_tag assignment (via a junction table), displayable in tag filters.
+/// Special behaviors: Unique tag name enforced, deleted_at for soft-removal. No denormalized fields.
+///
+///
+/// @namespace ForumStructure
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_thread_tag {
+  //----
+  // COLUMNS
+  //----
+  /// Tag primary key - Ensures each tag is unique and can be safely assigned/reused.
+  id String @id @db.Uuid
+  
+  /// Tag name - Human readable, atomic topic label. E.g., 'regulation'. Unique constraint.
+  name String
+  
+  /// Optional tag summary for tooltips/search. E.g., 'Threads about market regulations'.
+  description String?
+  
+  /// Tag creation time for sorting/audit.
+  created_at DateTime @db.Timestamptz
+  
+  /// Last updated time to support tagging moderation or analytics.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft delete handling for archiving or moderation, not removal from historical context.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  @@unique([name])
+  @@index([created_at])
+}
+
+/// Forum Category Snapshots - Implements the snapshot pattern to preserve point-in-time historical states of forum categories (in support of audit trails and rollback features).
+///
+/// Business Purpose: Allows the system to capture changes to categories (name, description, etc.) for compliance and moderation transparency (related to non-functional requirements: reliability, transparency, rollback capability). Maintains 3NF by not repeating posts/threads, only the atomic fields of the category.
+/// Usage: Auditing category renames, description changes. Rollback or investigation of moderation actions.
+/// Key Relationships: References the source category and user who made the change.
+/// Special Behaviors: Immutable; no update or delete except for legal compliance.
+///
+/// @namespace ForumStructure
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_forum_category_snapshot {
+  //----
+  // COLUMNS
+  //----
+  /// Snapshot PK - Unique identifier for each historical state of a forum category.
+  id String @id @db.Uuid
+  
+  /// FK to original forum category - Connects the snapshot to its source category.
+  forum_category_id String @db.Uuid
+  
+  /// FK to user who initiated this change (category mod/admin only).
+  created_by_id String @db.Uuid
+  
+  /// Snapshot of the category name at change time.
+  name String
+  
+  /// Snapshot of the category description (may be null if not set).
+  description String?
+  
+  /// Timestamp the snapshot was recorded.
+  snapshot_created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  forum_category discussion_board_forum_category @relation(fields: [forum_category_id], references: [id], onDelete: Cascade)
+  created_by discussion_board_user @relation(fields: [created_by_id], references: [id], onDelete: Cascade)
+  
+  @@index([created_by_id])
+  
+  @@index([forum_category_id, snapshot_created_at])
+}
+
+/// Forum Subcategory Snapshots - Implements the snapshot/audit requirement for subcategory changes.
+///
+/// Business Purpose: Captures versions of subcategories to track who, when, and how changes were made to subcategory metadata. Supports compliance and content moderation.
+/// Normalization: Only subcategory atomic fields captured.
+/// Usage: Revert or analyze updates to subcategory names, descriptions.
+/// Key Relationships: References source subcategory and the responsible user.
+/// Special Behaviors: Immutable after creation.
+///
+/// @namespace ForumStructure
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_forum_subcategory_snapshot {
+  //----
+  // COLUMNS
+  //----
+  /// Snapshot PK for forum subcategory versions.
+  id String @id @db.Uuid
+  
+  /// FK to subcategory the snapshot represents.
+  forum_subcategory_id String @db.Uuid
+  
+  /// FK to user who initiated the subcategory update.
+  created_by_id String @db.Uuid
+  
+  /// Snapshot of subcategory name.
+  name String
+  
+  /// Snapshot of subcategory description.
+  description String?
+  
+  /// When this snapshot was taken.
+  snapshot_created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  forum_subcategory discussion_board_forum_subcategory @relation(fields: [forum_subcategory_id], references: [id], onDelete: Cascade)
+  created_by discussion_board_user @relation(fields: [created_by_id], references: [id], onDelete: Cascade)
+  
+  @@index([created_by_id])
+  
+  @@index([forum_subcategory_id, snapshot_created_at])
+}

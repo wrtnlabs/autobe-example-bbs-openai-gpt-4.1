@@ -1,80 +1,482 @@
 {
-  "aggregate": {
-    "total": 1831983,
-    "input": {
-      "total": 1710689,
-      "cached": 40576
+  "facade": {
+    "aggregate": {
+      "total": 11034517,
+      "input": {
+        "total": 9718214,
+        "cached": 178944
+      },
+      "output": {
+        "total": 1316303,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
     },
-    "output": {
-      "total": 121294,
-      "reasoning": 0,
-      "accepted_prediction": 0,
-      "rejected_prediction": 0
+    "initialize": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "select": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "cancel": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "call": {
+      "total": 9319985,
+      "input": {
+        "total": 8578398,
+        "cached": 178944
+      },
+      "output": {
+        "total": 741587,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "describe": {
+      "total": 1714532,
+      "input": {
+        "total": 1139816,
+        "cached": 0
+      },
+      "output": {
+        "total": 574716,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
     }
   },
-  "initialize": {
-    "total": 0,
-    "input": {
-      "total": 0,
-      "cached": 0
+  "analyze": {
+    "aggregate": {
+      "total": 159696,
+      "input": {
+        "total": 144398,
+        "cached": 8960
+      },
+      "output": {
+        "total": 15298,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
     },
-    "output": {
+    "initialize": {
       "total": 0,
-      "reasoning": 0,
-      "accepted_prediction": 0,
-      "rejected_prediction": 0
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "select": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "cancel": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "call": {
+      "total": 139055,
+      "input": {
+        "total": 132234,
+        "cached": 8960
+      },
+      "output": {
+        "total": 6821,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "describe": {
+      "total": 20641,
+      "input": {
+        "total": 12164,
+        "cached": 0
+      },
+      "output": {
+        "total": 8477,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
     }
   },
-  "select": {
-    "total": 0,
-    "input": {
-      "total": 0,
-      "cached": 0
+  "prisma": {
+    "aggregate": {
+      "total": 652894,
+      "input": {
+        "total": 577111,
+        "cached": 33792
+      },
+      "output": {
+        "total": 75783,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
     },
-    "output": {
+    "initialize": {
       "total": 0,
-      "reasoning": 0,
-      "accepted_prediction": 0,
-      "rejected_prediction": 0
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "select": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "cancel": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "call": {
+      "total": 580672,
+      "input": {
+        "total": 516822,
+        "cached": 33792
+      },
+      "output": {
+        "total": 63850,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "describe": {
+      "total": 72222,
+      "input": {
+        "total": 60289,
+        "cached": 0
+      },
+      "output": {
+        "total": 11933,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
     }
   },
-  "cancel": {
-    "total": 0,
-    "input": {
-      "total": 0,
-      "cached": 0
+  "interface": {
+    "aggregate": {
+      "total": 1803592,
+      "input": {
+        "total": 1687171,
+        "cached": 43776
+      },
+      "output": {
+        "total": 116421,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
     },
-    "output": {
+    "initialize": {
       "total": 0,
-      "reasoning": 0,
-      "accepted_prediction": 0,
-      "rejected_prediction": 0
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "select": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "cancel": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "call": {
+      "total": 1623561,
+      "input": {
+        "total": 1536271,
+        "cached": 43776
+      },
+      "output": {
+        "total": 87290,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "describe": {
+      "total": 180031,
+      "input": {
+        "total": 150900,
+        "cached": 0
+      },
+      "output": {
+        "total": 29131,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
     }
   },
-  "call": {
-    "total": 1757492,
-    "input": {
-      "total": 1647007,
-      "cached": 40576
+  "test": {
+    "aggregate": {
+      "total": 8418335,
+      "input": {
+        "total": 7309534,
+        "cached": 92416
+      },
+      "output": {
+        "total": 1108801,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
     },
-    "output": {
-      "total": 110485,
-      "reasoning": 0,
-      "accepted_prediction": 0,
-      "rejected_prediction": 0
+    "initialize": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "select": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "cancel": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "call": {
+      "total": 6976697,
+      "input": {
+        "total": 6393071,
+        "cached": 92416
+      },
+      "output": {
+        "total": 583626,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "describe": {
+      "total": 1441638,
+      "input": {
+        "total": 916463,
+        "cached": 0
+      },
+      "output": {
+        "total": 525175,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
     }
   },
-  "describe": {
-    "total": 74491,
-    "input": {
-      "total": 63682,
-      "cached": 0
+  "realize": {
+    "aggregate": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
     },
-    "output": {
-      "total": 10809,
-      "reasoning": 0,
-      "accepted_prediction": 0,
-      "rejected_prediction": 0
+    "initialize": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "select": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "cancel": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "call": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
+    },
+    "describe": {
+      "total": 0,
+      "input": {
+        "total": 0,
+        "cached": 0
+      },
+      "output": {
+        "total": 0,
+        "reasoning": 0,
+        "accepted_prediction": 0,
+        "rejected_prediction": 0
+      }
     }
   }
 }
