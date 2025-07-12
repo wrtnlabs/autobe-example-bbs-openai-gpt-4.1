@@ -14,22 +14,22 @@ model attendance_access_log {
   // COLUMNS
   //----
   /// [Primary key] - Implements unique identification for each access event. All access log rows have a globally unique id for audit traceability. Always in the 'id' field for normalization and reference. For example, log line ID for reviewing access history.
-  id String @id @db.Uuid
+  id String @id
   
   /// [Teacher reference] - Links access event to teacher role, if performed by a teacher. Null if not relevant. Normalizes who performed the access for auditing by role. For example, a teacher opening the class dashboard. Nullable: admin/parent access.
-  teacher_id String? @db.Uuid
+  teacher_id String?
   
   /// [Student reference] - Links access event to student, if performed by a student. Null if not relevant. Maintains normalization by only referencing, never duplicating user data. For example, a student checks their attendance log. Nullable: teacher/parent access.
-  student_id String? @db.Uuid
+  student_id String?
   
   /// [Parent reference] - Links access event to a parent, if performed by parent/guardian. Null if not relevant. Ensures normalization and distinct role link. For example, a parent viewing notification dashboard. Nullable except for parent access.
-  parent_id String? @db.Uuid
+  parent_id String?
   
   /// [Admin reference] - If the access was by an admin/authority. Always normalized – records only UUID, never duplicated info. Null if not relevant. For example, an admin reviewing logs. Nullable for non-admin roles.
-  admin_id String? @db.Uuid
+  admin_id String?
   
   /// [Classroom reference] - Optionally links this access to a classroom context if relevant (e.g., teacher opens a class dashboard). Null if not relevant. Maintains strict normalization – never duplicating classroom data, only referencing. For example, viewing attendance for a specific class.
-  classroom_id String? @db.Uuid
+  classroom_id String?
   
   /// [IP Address] - Captures remote IP address from which the user accessed the system. Implements regulatory and audit requirements for traceability by IP. For example, used in suspicious access investigations. Maintains normalization as atomic string. Non-null.
   ip_address String
@@ -41,7 +41,7 @@ model attendance_access_log {
   device_id String?
   
   /// [Access timestamp] - The exact timestamp of the access event, in UTC. Implements requirement for access event ordering and full audit trace. Maintains normalization (atomic datetime, non-duplicated). For example, can sort by access time for investigations. Non-null.
-  accessed_at DateTime @db.Timestamptz
+  accessed_at DateTime
   
   //----
   // RELATIONS
@@ -75,22 +75,22 @@ model attendance_audit_log {
   // COLUMNS
   //----
   /// [Primary key] - Uniquely identifies every audit event. Implements atomic row identity for each action. For example, for referencing an audit trail or incident report. Non-null, strictly unique.
-  id String @id @db.Uuid
+  id String @id
   
   /// [Teacher reference] - Actor if the action was performed by a teacher. Null otherwise. Maintains normalization, enables per-teacher audits (e.g., edits own students).
-  teacher_id String? @db.Uuid
+  teacher_id String?
   
   /// [Student reference] - Actor if the event was done by a student (e.g., requests own attendance edit). Nullable for other roles/actions. Normalization enforced.
-  student_id String? @db.Uuid
+  student_id String?
   
   /// [Parent reference] - Actor if audit event performed by parent/guardian (e.g., notification request/view). Nullable for other roles. Maintains 3NF.
-  parent_id String? @db.Uuid
+  parent_id String?
   
   /// [Admin reference] - Used if the audit event was performed by admin/authority. Null for non-admin. Maintains normalized structure (FK linkage, role separation).
-  admin_id String? @db.Uuid
+  admin_id String?
   
   /// [Classroom reference] - Links to classroom context if the event relates to a classroom (e.g., attendance export, bulk policy change). Nullable if not relevant. Normalization via FK only.
-  classroom_id String? @db.Uuid
+  classroom_id String?
   
   /// [Event type] - Describes the kind of action being audited: e.g. 'attendance_edit', 'policy_update', 'data_export', etc. Implements requirement for granular action logs. Fully normalized as atomic string, reinforced by documentation/examples but not enums (for extensibility). E.g.: 'policy_update', 'student_added', 'bulk_export'.
   event_type String
@@ -105,7 +105,7 @@ model attendance_audit_log {
   failed_reason String?
   
   /// [Audit event timestamp] - Exact UTC datetime event was logged. Implements requirement for chronological forensic trail of critical actions. Maintains normalization; for example, used in timeline incident investigations.
-  audited_at DateTime @db.Timestamptz
+  audited_at DateTime
   
   //----
   // RELATIONS

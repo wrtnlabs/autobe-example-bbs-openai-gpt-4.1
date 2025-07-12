@@ -14,27 +14,27 @@ model attendance_notification {
   /// [PK] - Implements unique identification for each notification event.
   /// Globally unique identifier for tracking and referencing attendance-related notifications. Ensures normalization and system-wide traceability.
   /// For example, used as a foreign key in notification channels and history records.
-  id String @id @db.Uuid
+  id String @id
   
   /// [FK] - Implements linkage to the attendance event that caused this notification.
   /// Links back to the student's attendance record so full audit trail is retained.
   /// For example, notification references a specific student's daily check-in/absence event.
-  attendance_record_id String @db.Uuid
+  attendance_record_id String
   
   /// [FK] - References attendance_student.
   /// Specifies which student this notification relates to. Maintains 3NF by not duplicating student attributes here; join as needed.
   /// For example, so parent notifications are correctly directed.
-  student_id String @db.Uuid
+  student_id String
   
   /// [FK] - References attendance_teacher.
   /// Who triggered the event/notification (if applicable). Maintains 3NF by not duplicating teacher details.
   /// Useful for teacher-determined notifications or exception notes.
-  teacher_id String? @db.Uuid
+  teacher_id String?
   
   /// [FK] - References attendance_classroom.
   /// Facilitates filtering/group notification by classroom context. Maintains normalization.
   /// For example: Notifications related to whole class events.
-  classroom_id String @db.Uuid
+  classroom_id String
   
   /// [Event Type] - Implements notification event typing.
   /// Enumerates triggers such as 'present', 'late', 'absent', 'leave'. Maintains normalization by not duplicating status logic elsewhere.
@@ -44,7 +44,7 @@ model attendance_notification {
   /// [Triggered Timestamp] - When this notification event was generated.
   /// Ensures auditability and sequential event tracking.
   /// For example: Record created at the moment attendance is submitted.
-  triggered_at DateTime @db.Timestamptz
+  triggered_at DateTime
   
   /// [Message Template] - Stores the notification template used for this event.
   /// Does not store actual sent message (see history table). Maintains normalization.
@@ -85,17 +85,17 @@ model attendance_notification_channel {
   /// [PK] - Unique identifier for each channel binding.
   /// Enables reliable foreign key referencing and traceability across the system.
   /// For example, maps each channel preference to notifications and history tables.
-  id String @id @db.Uuid
+  id String @id
   
   /// [FK] - References attendance_student, to route per-student preferences.
   /// Maintains normalized storage of channel logic without duplicating student or parent info.
   /// Allows lookups of a student's preferred notification channel.
-  student_id String @db.Uuid
+  student_id String
   
   /// [FK] - References attendance_parent, maps to legal guardians/recipients.
   /// For multi-child parents, allows consolidation of notification channel entries per student.
   /// Does not duplicate parent contact—always join on FK.
-  parent_id String? @db.Uuid
+  parent_id String?
   
   /// [Channel Type] - Defines the type of channel (app_push, sms, email, etc).
   /// Enumerates all supported outbound notification patterns. Maintains normalization by not embedding channel behavior.
@@ -109,7 +109,7 @@ model attendance_notification_channel {
   /// [Preference Order] - Rank or fallback order for channels when multiple are available.
   /// Lower value = higher priority. Used for automated failover logic.
   /// For example, 1 for app, 2 for sms, 3 for email.
-  preference_order Int @db.Integer
+  preference_order Int
   
   //----
   // RELATIONS
@@ -141,23 +141,23 @@ model attendance_notification_history {
   /// [PK] - Uniquely identifies each delivery log entry.
   /// Allows tracking, troubleshooting, and reporting per notification delivery attempt.
   /// For example, one notification can have several attempts/rows per channel.
-  id String @id @db.Uuid
+  id String @id
   
   /// [FK] - Links to attendance_notification.
   /// Matches each history record to the exact event/notification it logs. Maintains strict 3NF.
-  notification_id String @db.Uuid
+  notification_id String
   
   /// [FK] - Links to attendance_notification_channel.
   /// Allows each attempt/result row to be tied to its delivery channel context. Strictly normalized.
-  channel_id String @db.Uuid
+  channel_id String
   
   /// [Sent Timestamp] - Timestamp message was sent or attempted.
   /// Supports auditability and analytics.
-  sent_at DateTime @db.Timestamptz
+  sent_at DateTime
   
   /// [Delivered Timestamp] - When delivery was confirmed by provider or feedback API.
   /// May be null if not delivered.
-  delivered_at DateTime? @db.Timestamptz
+  delivered_at DateTime?
   
   /// [Status] - Status of this attempt: 'pending', 'delivered', 'failed', 'retried', etc.
   /// Maintains normalization by never caching per-notification status elsewhere. Example: 'delivered', 'failed', 'pending'.

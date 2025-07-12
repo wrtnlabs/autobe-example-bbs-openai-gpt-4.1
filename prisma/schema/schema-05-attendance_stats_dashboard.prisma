@@ -14,34 +14,34 @@ model attendance_stats_daily {
   // COLUMNS
   //----
   /// [Primary Key] - Unique identifier for this daily classroom/school statistic row. Always atomic, guarantees uniqueness by row.
-  id String @id @db.Uuid
+  id String @id
   
   /// [Classroom Reference] - FK to classroom. Ensures stats are specific to a classroom, not global. Required.
-  classroom_id String @db.Uuid
+  classroom_id String
   
   /// [School Reference] - FK to school. Provides option to aggregate/partition stats by institution. Required.
-  school_id String @db.Uuid
+  school_id String
   
   /// [Target Day] - The date string (YYYY-MM-DD) for this statistics row. Always atomic. For filtering/aggregation.
   day String
   
   /// [Present Count] - Number of present students. Must match attendance record aggregation result. No duplication.
-  present_count Int @db.Integer
+  present_count Int
   
   /// [Late Count] - Number of late students. Atomic, no duplication.
-  late_count Int @db.Integer
+  late_count Int
   
   /// [Absent Count] - Number of absentees for the day.
-  absent_count Int @db.Integer
+  absent_count Int
   
   /// [Early Leave Count] - Number of students with early leave (if supported), atomic and normalized.
-  early_leave_count Int @db.Integer
+  early_leave_count Int
   
   /// [Created At Timestamp] - Row creation time (auditing).
-  created_at DateTime @db.Timestamptz
+  created_at DateTime
   
   /// [Updated At Timestamp] - Last modification time (auditing).
-  updated_at DateTime @db.Timestamptz
+  updated_at DateTime
   
   //----
   // RELATIONS
@@ -69,13 +69,13 @@ model attendance_stats_student_summary {
   // COLUMNS
   //----
   /// [Primary Key] - Unique summary for (student, period).
-  id String @id @db.Uuid
+  id String @id
   
   /// [Student Reference] - FK to the student. Ensures all stats are per student. Required.
-  student_id String @db.Uuid
+  student_id String
   
   /// [Classroom Reference] - FK to the student's main classroom for the period. Required.
-  classroom_id String @db.Uuid
+  classroom_id String
   
   /// [Period Start Date] - First day of aggregation (YYYY-MM-DD, atomic, not nullable).
   period_start String
@@ -84,22 +84,22 @@ model attendance_stats_student_summary {
   period_end String
   
   /// [Total Present] - Days present in period.
-  total_present Int @db.Integer
+  total_present Int
   
   /// [Total Late] - Days late in period.
-  total_late Int @db.Integer
+  total_late Int
   
   /// [Total Absent] - Days absent in period.
-  total_absent Int @db.Integer
+  total_absent Int
   
   /// [Total Early Leave] - Days with early leave. Atomic, not nullable.
-  total_early_leave Int @db.Integer
+  total_early_leave Int
   
   /// [Created At Timestamp] - Row creation time for provenance.
-  created_at DateTime @db.Timestamptz
+  created_at DateTime
   
   /// [Updated At Timestamp] - Last modification time for provenance.
-  updated_at DateTime @db.Timestamptz
+  updated_at DateTime
   
   //----
   // RELATIONS
@@ -127,14 +127,14 @@ model attendance_stats_classroom_summary {
   // COLUMNS
   //----
   /// [Primary Key] - Unique summary for (classroom, period).
-  id String @id @db.Uuid
+  id String @id
   
   /// [Classroom Reference] - FK to classroom. Required, normalizes aggregation to exact class.
   ///
-  classroom_id String @db.Uuid
+  classroom_id String
   
   /// [School Reference] - FK to school. Extra aggregation support for admin, mandatory.
-  school_id String @db.Uuid
+  school_id String
   
   /// [Summary Start Date] - Beginning day of summary period (YYYY-MM-DD).
   period_start String
@@ -143,22 +143,22 @@ model attendance_stats_classroom_summary {
   period_end String
   
   /// [Total Present] - Present count for classroom/period.
-  total_present Int @db.Integer
+  total_present Int
   
   /// [Total Late] - Late count for classroom/period.
-  total_late Int @db.Integer
+  total_late Int
   
   /// [Total Absent] - Absence count for classroom/period.
-  total_absent Int @db.Integer
+  total_absent Int
   
   /// [Total Early Leave] - Early leave count for class/period.
-  total_early_leave Int @db.Integer
+  total_early_leave Int
   
   /// [Created At Timestamp] - Creation time for auditing.
-  created_at DateTime @db.Timestamptz
+  created_at DateTime
   
   /// [Updated At Timestamp] - Modification time for auditing.
-  updated_at DateTime @db.Timestamptz
+  updated_at DateTime
   
   //----
   // RELATIONS
@@ -186,16 +186,16 @@ model attendance_stats_abnormal_log {
   // COLUMNS
   //----
   /// [Primary Key] - Unique anomaly log. Each row is a single anomaly instance.
-  id String @id @db.Uuid
+  id String @id
   
   /// [Attendance Record Reference] - FK to the atom-level attendance record that this anomaly log is attached to.
-  attendance_record_id String @db.Uuid
+  attendance_record_id String
   
   /// [Student Reference] - FK to student involved in anomaly.
-  student_id String @db.Uuid
+  student_id String
   
   /// [Admin Reference] - FK to admin who manually tagged/resolved anomaly. Optional (nullable if anomaly unresolved or system-detected only).
-  admin_id String? @db.Uuid
+  admin_id String?
   
   /// [Anomaly Type] - Label (duplicate, location_mismatch, code_invalid, etc). Required for audit/search. Normalized, not nullable.
   anomaly_type String
@@ -207,16 +207,16 @@ model attendance_stats_abnormal_log {
   status String
   
   /// [Detected At] - When this anomaly was first detected. Not nullable.
-  occurred_at DateTime @db.Timestamptz
+  occurred_at DateTime
   
   /// [Resolved At] - When status changed to closed (nullable).
-  resolved_at DateTime? @db.Timestamptz
+  resolved_at DateTime?
   
   /// [Log Created At] - Provenance/audit.
-  created_at DateTime @db.Timestamptz
+  created_at DateTime
   
   /// [Last Updated At] - Audit trail for log changes.
-  updated_at DateTime @db.Timestamptz
+  updated_at DateTime
   
   //----
   // RELATIONS

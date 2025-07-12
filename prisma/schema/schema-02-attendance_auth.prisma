@@ -13,10 +13,10 @@ model attendance_social_account {
   // COLUMNS
   //----
   /// [Primary Key] - Implements the requirement for system-wide unique identification. Uniquely identifies a single social account link. Atomic, non-derivable, auto-generated UUID.
-  id String @id @db.Uuid
+  id String @id
   
   /// [Authentication Account FK] - Links to the local core authentication account that this social account is mapped to. Ensures strict 3NF, never storing redundant user data.
-  auth_account_id String @db.Uuid
+  auth_account_id String
   
   /// [Social Provider Name] - Implements the '인증 제공자 종류' requirement. Stores provider key (e.g. 'google', 'naver', 'kakao'). Only atomic provider keys, never human readable names.
   provider String
@@ -25,7 +25,7 @@ model attendance_social_account {
   social_id String
   
   /// [Linkage Timestamp] - Records the link creation UTC time (membership via social account). For evidence, never update or delete, only append new link if needed.
-  created_at DateTime @db.Timestamptz
+  created_at DateTime
   
   //----
   // RELATIONS
@@ -49,7 +49,7 @@ model attendance_auth_account {
   // COLUMNS
   //----
   /// [Primary Key] - Implements unique identity across all authentication schemas.
-  id String @id @db.Uuid
+  id String @id
   
   /// [Email] - Optional field for local auth/notification. Must be unique if specified. Null for pure social logins.
   email String?
@@ -58,13 +58,13 @@ model attendance_auth_account {
   password_hash String?
   
   /// [Creation Timestamp] - When the authentication account was created. Never updated.
-  created_at DateTime @db.Timestamptz
+  created_at DateTime
   
   /// [Last Updated Time] - For profile info or recovery. Update whenever account details change. For evidence/audit.
-  updated_at DateTime @db.Timestamptz
+  updated_at DateTime
   
   /// [Soft Delete Marker] - When account is deactivated/marked deleted. Null = active; non-null = no login permitted. Keeps history for audit evidence.
-  deleted_at DateTime? @db.Timestamptz
+  deleted_at DateTime?
   
   //----
   // RELATIONS
@@ -96,22 +96,22 @@ model attendance_auth_session {
   // COLUMNS
   //----
   /// [Primary Key] - Unique identifier of the auth session. Required for linking sessions for audit purposes, strict 3NF; atomic.
-  id String @id @db.Uuid
+  id String @id
   
   /// [FK: Auth Account] - Links session to login identity. For example, querying all sessions for a given account. Not unique (1:N).
-  auth_account_id String @db.Uuid
+  auth_account_id String
   
   /// [Session Token] - Persisted JWT or opaque token. Atomic and strictly not reused in multiple records. Never denormalized profile or calculated data.
   session_token String
   
   /// [Issue Time] - UTC creation of the session. Never updated.
-  issued_at DateTime @db.Timestamptz
+  issued_at DateTime
   
   /// [Expire Time] - When the token or session is no longer valid. Value set according to OAuth2 flow. Never calculated in table, only stored.
-  expires_at DateTime @db.Timestamptz
+  expires_at DateTime
   
   /// [Revoke Time] - Non-null when session is explicitly ended (logout, forced expire, etc.). Null means active session. Do not delete for audit.
-  revoked_at DateTime? @db.Timestamptz
+  revoked_at DateTime?
   
   /// [User Agent Info] - Optional: Stores string identifying device or client info for session context. Useful for audit. 3NF compliant, atomic field only.
   user_agent String?

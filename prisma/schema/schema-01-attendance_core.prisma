@@ -7,13 +7,13 @@ model attendance_teacher {
   // COLUMNS
   //----
   /// [Primary Key] - Unique teacher identifier. Used for all references/joins.
-  id String @id @db.Uuid
+  id String @id
   
   /// [School Foreign Key] - Links to attendance_school. 3NF, required.
-  school_id String @db.Uuid
+  school_id String
   
   /// [Auth Account FK] - 1:1 with attendance_auth_account. Role/account separation for security.
-  auth_account_id String @db.Uuid
+  auth_account_id String
   
   /// [Teacher Name] - Atomic, normalized. No derived values.
   name String
@@ -25,10 +25,10 @@ model attendance_teacher {
   phone String
   
   /// [Created At] - Record creation timestamp for audit.
-  created_at DateTime @db.Timestamptz
+  created_at DateTime
   
   /// [Updated At] - Modification timestamp for audit.
-  updated_at DateTime @db.Timestamptz
+  updated_at DateTime
   
   //----
   // RELATIONS
@@ -57,19 +57,19 @@ model attendance_student {
   // COLUMNS
   //----
   /// [Primary Key] - Unique student identifier.
-  id String @id @db.Uuid
+  id String @id
   
   /// [School Foreign Key] - Reference to attendance_school. Required, 3NF.
-  school_id String @db.Uuid
+  school_id String
   
   /// [Classroom Foreign Key] - Student's assigned class. 3NF, required.
-  classroom_id String @db.Uuid
+  classroom_id String
   
   /// [Parent Foreign Key] - Many students:one parent. Nullable for orphans/imports.
-  parent_id String? @db.Uuid
+  parent_id String?
   
   /// [Auth Account FK] - 1:1 mapping to attendance_auth_account. No duplication.
-  auth_account_id String @db.Uuid
+  auth_account_id String
   
   /// [Student Name] - Atomic. Do not concatenate or calculate.
   name String
@@ -78,13 +78,13 @@ model attendance_student {
   gender String
   
   /// [Birthdate] - ISO datetime, atomic, not aggregated. For stats/age calc elsewhere.
-  birthdate DateTime @db.Timestamptz
+  birthdate DateTime
   
   /// [Created At] - Student record timestamp for audits.
-  created_at DateTime @db.Timestamptz
+  created_at DateTime
   
   /// [Updated At] - Audit timestamp for record changes.
-  updated_at DateTime @db.Timestamptz
+  updated_at DateTime
   
   //----
   // RELATIONS
@@ -118,10 +118,10 @@ model attendance_parent {
   // COLUMNS
   //----
   /// [Primary Key] - Parent/guardian identity, referenced by students.
-  id String @id @db.Uuid
+  id String @id
   
   /// [Auth Account FK] - 1:1 parent authentication mapping.
-  auth_account_id String @db.Uuid
+  auth_account_id String
   
   /// [Parent Name] - Guardian full name, atomic.
   name String
@@ -133,10 +133,10 @@ model attendance_parent {
   phone String
   
   /// [Created At] - Audit for addition/linkage.
-  created_at DateTime @db.Timestamptz
+  created_at DateTime
   
   /// [Updated At] - Info change audit.
-  updated_at DateTime @db.Timestamptz
+  updated_at DateTime
   
   //----
   // RELATIONS
@@ -162,13 +162,13 @@ model attendance_admin {
   // COLUMNS
   //----
   /// [Primary Key] - Unique admin/official identifier.
-  id String @id @db.Uuid
+  id String @id
   
   /// [School Foreign Key] - Admin's school/responsibility. Nullable for system/global admin.
-  school_id String? @db.Uuid
+  school_id String?
   
   /// [Auth Account FK] - 1:1 with attendance_auth_account. Required for audit integrity.
-  auth_account_id String @db.Uuid
+  auth_account_id String
   
   /// [Admin Name] - Atomic, for contact/logging.
   name String
@@ -177,10 +177,10 @@ model attendance_admin {
   email String
   
   /// [Created At] - Audit for admin creation.
-  created_at DateTime @db.Timestamptz
+  created_at DateTime
   
   /// [Updated At] - Audit for admin changes.
-  updated_at DateTime @db.Timestamptz
+  updated_at DateTime
   
   //----
   // RELATIONS
@@ -206,7 +206,7 @@ model attendance_school {
   // COLUMNS
   //----
   /// [Primary Key] - School identifier.
-  id String @id @db.Uuid
+  id String @id
   
   /// [School Name] - Atomic, normalized for directory/search.
   name String
@@ -215,7 +215,7 @@ model attendance_school {
   address String
   
   /// [Created At] - School record creation, audit only.
-  created_at DateTime @db.Timestamptz
+  created_at DateTime
   
   //----
   // RELATIONS
@@ -239,25 +239,25 @@ model attendance_classroom {
   // COLUMNS
   //----
   /// [Primary Key] - Classroom identifier.
-  id String @id @db.Uuid
+  id String @id
   
   /// [School Foreign Key] - 3NF, classroom's school owner.
-  school_id String @db.Uuid
+  school_id String
   
   /// [Lead Teacher FK] - Responsible teacher. 3NF, required (not derived from class roster).
-  teacher_id String @db.Uuid
+  teacher_id String
   
   /// [Classroom Name] - Label for class listing/selection, atomic.
   name String
   
   /// [Grade Level] - Integer grade for grouping/stats. Normalized.
-  grade_level Int @db.Integer
+  grade_level Int
   
   /// [Created At] - Classroom creation time.
-  created_at DateTime @db.Timestamptz
+  created_at DateTime
   
   /// [Updated At] - Record update time.
-  updated_at DateTime @db.Timestamptz
+  updated_at DateTime
   
   //----
   // RELATIONS
