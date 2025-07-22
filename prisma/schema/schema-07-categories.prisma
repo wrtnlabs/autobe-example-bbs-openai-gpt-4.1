@@ -1,0 +1,77 @@
+/// Discussion Board Tag entity - This implements the requirement for thread and post tagging (see Features & User Journeys and Functional Requirements F06, F01). 
+///
+/// Business explanation: Allows categorization and searchability of threads and posts by enabling tags/keywords, which foster better content discovery and flexible filtering. Maintains 3NF compliance by separating tag definitions from application (thread/post linkage handled elsewhere). For example, a thread about 'Monetary Policy' might have tags like 'macroeconomics', 'inflation', and 'central banks'.
+///
+/// Key relationships: May be referenced by posts/threads in other domains via M:N link tables. 
+/// Special behaviors: Tag names must be unique per board; search-optimized via GIN index.
+///
+/// @namespace Categories
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_tags {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for the tag record.
+  id String @id
+  
+  /// Tag Name - Implements requirement F06 for content search/filter. This is the unique, human-readable tag label (e.g., 'inflation'). Ensures normalization by keeping tag vocabulary distinct and atomic. For example, used for content discovery filters. Constraint: unique within context.
+  name String
+  
+  /// Tag Description - Implements search UX and accessibility requirements. Human-readable annotation of tag purpose or scope (e.g., 'Discussion about macroeconomic inflation topics'). Supports normalization by not duplicating explanatory text elsewhere. For example, shown on tag hover in UI. Optional.
+  description String?
+  
+  /// Creation timestamp - Implements audit/traceability requirement. When was the tag added to the system? Ensures normalization/audit compliance; enables tag lifecycle reviews. Example: '2024-07-22T14:17:31.291Z'.
+  created_at DateTime
+  
+  /// Last update timestamp - Implements audit trail/maintenance requirements. Normalization maintained by only storing atomic state (not deltas/versions). Example usage: UI can display last modified date for moderators.
+  updated_at DateTime
+  
+  /// Soft delete timestamp - Implements reversible deletion (non-functional requirement). Allows safe tag removal (not physical deletion) for audit/compliance. Null if active, else indicates deletion time. For example, avoid losing historical tagging data. Optional.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  @@unique([name])
+  @@index([created_at])
+}
+
+/// Discussion Board Category entity - This implements the requirement to organize threads/posts into broad categories or sections, as outlined in the Features/User Journeys and F01/F06 (topic discovery and advanced search).
+///
+/// Business explanation: Supports a forum-like taxonomy (e.g., 'Politics', 'Economics', 'Law & Policy'). Enables self-service navigation, structuring, and filtering by higher-level groups, separated from tags (finer granularity). Maintains 3NF compliance by holding only the atomic category definition; actual assignment to threads handled by M:N link in another model.
+///
+/// Key relationships: Referenced by threads/posts elsewhere (not here). May support parent-child relationships for subcategories in an extension.
+/// Special behaviors: Names must be unique within site/context. Used in site menus and search filters.
+///
+/// @namespace Categories
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_categories {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for the category record.
+  id String @id
+  
+  /// Category Name - Implements requirement for categorization and navigation (F01, F06). Unique, human-readable category label (e.g., 'Economics', 'Legislation'). Ensures normalization by avoiding duplication; referenced for browsing/search. Example: in UI category menus.
+  name String
+  
+  /// Category Description - Implements usability/accessibility requirement. Defines purpose/scope for category (e.g., 'Topics about national or global economic policy'). Normalization by not storing detailed explanation in other tables. Optional.
+  description String?
+  
+  /// Creation timestamp - For audit/traceability (requirement: audit trail, non-functional). When was this category created? Normalization: one atomic value per record. Example: in site admin panel.
+  created_at DateTime
+  
+  /// Last update timestamp - For maintenance/audit requirements. When was this category last updated? Normalization: only current value, not change list. Example: for admins to track changes.
+  updated_at DateTime
+  
+  /// Soft delete timestamp - Implements requirement for reversible deletion. Null if active; if set, category is marked deleted (not removed). Maintains normalization by separating lifecycle from business fields. Example: archival for audit/compliance.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  discussion_board_threads discussion_board_threads[]
+  
+  @@unique([name])
+  @@index([created_at])
+}

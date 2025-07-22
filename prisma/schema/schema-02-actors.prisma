@@ -1,0 +1,161 @@
+/// Discussion Board Guest Account - This implements the requirement for unauthenticated user sessions, supporting view-only access (see F01, F06 in requirements). This model stores anonymous session metadata to support audit logging, moderation traceability, and potentially soft-identification for abuse prevention. Maintains 3NF by storing only session-atomic data rather than duplicating member or device data. Example: tracking a guest's session for read-only content viewing, reporting, or rate limiting. Key relationships: none (guests are not linked to posts, only tracked passively). Special behaviors: Guests can browse public threads but cannot interact or author posts/comments. No business relationships to members or content entities directly. Session expiration and enrichment handled in application layer, not schema.
+///
+/// @namespace Actors
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_guests {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for the guest session.
+  id String @id
+  
+  /// Session token for tracking guest user's browsing session. Implements anonymous identification requirement for viewing, rate limiting, and audit scenarios. Ensures normalization by separating guest activity from member identities. Example: "guest_ae892ded9b5e2da4". Immutable per guest session.
+  session_token String
+  
+  /// IP address associated with the guest session. Implements audit and abuse mitigation requirements (see security section). Ensures each session can be traced for moderation or abuse prevention. Example: "203.0.113.42". May be anonymized or truncated per privacy rules.
+  ip_address String
+  
+  /// User agent string from the guest's browser/device. Implements security and analytics requirement. Normalized: atomic per browsing session, no aggregation. Example: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:91.0) Gecko/20100101 Firefox/91.0".
+  user_agent String?
+  
+  /// Timestamp when guest session started. Implements audit and moderation traceability. Ensures normalization by not storing calculated or truncated intervals. Example usage: session start logging, abuse pattern analysis.
+  created_at DateTime
+  
+  /// Expiration timestamp for guest session validity. Implements security requirement for limiting the duration of anonymous access (see non-functional requirements). Ensures 3NF by storing atomic time values only. Example: 24 hours from session creation.
+  expires_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  discussion_board_search_histories discussion_board_search_histories[]
+  
+  @@unique([session_token])
+  @@index([created_at])
+  @@index([ip_address])
+}
+
+/// Discussion Board Member Account - Implements the core requirement for registered, authenticated users who participate in discussions (see F02, F03, F07, and user journeys). This model stores essential profile, authentication, and state information for each member, maintaining strict 3NF separation from moderator/admin roles and content. Used for identity, interaction, notification, and access control. Example: A member creates threads, replies, votes, or reports content. Key relationships: Moderators and administrators are separately modeled for role escalation; foreign keys reference only when action escalation or logs are needed. Special behaviors: Member-level fields only (role-based logic handled in application and foreign models). Password policies, hashing, and verification are outside scope (handled by auth provider interface).
+///
+/// @namespace Actors
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_members {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for the member account.
+  id String @id
+  
+  /// Member's unique public username. Implements profile, notification, and search functionality. Example: "democracyFan_21". Ensures normalization as user identity is atomic and required.
+  username String
+  
+  /// Email address for system notifications, password recovery, and authentication purposes. Implements F07 notification delivery and F02/F03 account validation. Example: "jane.doe@email.com". Unique per member; normalization by storing as standalone atomic value.
+  email String
+  
+  /// Storage for password hash (never raw password). Required for credential validation compliance. Ensures normalization—authentication security separated from business logic. Example: argon2id hash string; never stored or retrieved as raw passwords.
+  hashed_password String
+  
+  /// Display name for friendly presentation in forums. Implements member-facing UI requirement; can be changed by user. Example: "Jane D." Normalized: separate from username and email for privacy/configurability.
+  display_name String
+  
+  /// Optional URI to member's profile image. Implements UX profile presentation requirements. Example: "https://cdn.site.com/profiles/member-42.jpg". Null if not set. Ensures data normalization—only one atomic string per member.
+  profile_image_url String?
+  
+  /// Whether the member account is active (able to log in/interact). Implements moderation/suspension workflows. Example: false for banned or deactivated members. Ensures normalization by storing state per member without embedding logic.
+  is_active Boolean
+  
+  /// Timestamp of member registration. Implements registration timestamp recording requirement (see audit trail & engagement KPIs). Example usage: tracking new sign-ups per day.
+  created_at DateTime
+  
+  /// Timestamp when member information was last updated. Implements audit/update history in line with privacy and recoverability requirements. Updated per profile or credential change. Ensures normalization—no aggregated edit history kept here.
+  updated_at DateTime
+  
+  /// Timestamp for soft deletion (member removal by request or mod action). Implements reversibility and audit trail per requirements. Example usage: member invokes right to erasure; row remains for audit, but does not appear in UX. Null if active.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  discussion_board_moderators discussion_board_moderators?
+  discussion_board_administrators discussion_board_administrators?
+  discussion_board_threads discussion_board_threads[]
+  discussion_board_posts discussion_board_posts[]
+  discussion_board_comments discussion_board_comments[]
+  discussion_board_attachments discussion_board_attachments[]
+  discussion_board_reports discussion_board_reports[]
+  discussion_board_warnings discussion_board_warnings[]
+  discussion_board_bans discussion_board_bans[]
+  discussion_board_notifications_of_recipient_member_id discussion_board_notifications[] @relation("discussion_board_notifications_of_recipient_member_id")
+  discussion_board_notifications_of_trigger_actor_id discussion_board_notifications[] @relation("discussion_board_notifications_of_trigger_actor_id")
+  discussion_board_subscriptions discussion_board_subscriptions[]
+  discussion_board_mentions_of_mentioned_member_id discussion_board_mentions[] @relation("discussion_board_mentions_of_mentioned_member_id")
+  discussion_board_mentions_of_actor_member_id discussion_board_mentions[] @relation("discussion_board_mentions_of_actor_member_id")
+  discussion_board_votes discussion_board_votes[]
+  
+  @@unique([username])
+  @@unique([email])
+  @@index([created_at])
+  @@index([is_active])
+}
+
+/// Discussion Board Moderator Role - Implements the requirement for elevated content moderation privileges (see F04, F08, F07). This model enables escalation of accounts to moderator status and tracks their moderator-specific attributes. Normalized structure: distinct from base member data (which they extend via foreign key), ensuring single source of truth for credentials and user identity. Example: a moderator reviews reports, edits/hides comments, and pins threads. Key relationships: 1:1 with member; foreign key to `discussion_board_members.id` for role escalation. Special behaviors: All moderator-only fields (e.g., assignment to forums) go here; never duplicate member/account data. Action logs are tracked in moderation tables, not here.
+///
+/// @namespace Actors
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_moderators {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for the moderator role assignment.
+  id String @id
+  
+  /// Target member's {@link discussion_board_members.id} - Uniquely identifies which registered member has been assigned moderator role. Implements role escalation logic (see authorization specs).
+  member_id String
+  
+  /// Timestamp when member was assigned moderator role. Supports audit trail and moderator onboarding tracking in line with security specs. Ensures normalization; never stores calculated tenure.
+  assigned_at DateTime
+  
+  /// Timestamp when moderator role was revoked. Null if currently active. Implements moderation audit and access control reversibility (see non-functional requirements). Ensures role status transitions are atomic and auditable.
+  revoked_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  moderator_member discussion_board_members @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  
+  discussion_board_reports discussion_board_reports[]
+  discussion_board_moderation_logs discussion_board_moderation_logs[]
+  discussion_board_warnings discussion_board_warnings[]
+  discussion_board_bans discussion_board_bans[]
+  
+  @@unique([member_id])
+  @@index([assigned_at])
+}
+
+/// Discussion Board Administrator Role - Implements the specification for system-wide managerial privileges and site configuration (see requirements F05, F04, admin user journeys). Tracks which member accounts hold administrative access, supporting assignment, audit, and privilege escalation. Normalized by linking only to member entity (no duplicate account data). Example: an administrator assigns roles, configures settings, and oversees all board operations. Key relationships: 1:1 with member, foreign key to `discussion_board_members.id`. Special behaviors: All admin-only fields (escalation, audit, assignment) managed here; their content activity is handled via base member model. Role logs and audits are stored elsewhere.
+///
+/// @namespace Actors
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_administrators {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for the administrator role assignment.
+  id String @id
+  
+  /// Target member's {@link discussion_board_members.id} - Identifies registered user escalated to administrator role. Implements principal site configuration authority and reversible privilege assignment. Ensures referential integrity with users table.
+  member_id String
+  
+  /// Timestamp when member was assigned administrator role. Implements admin audit trail (see requirements) and onboarding reporting. Ensures normalization by non-redundant, per-assignment timestamps only.
+  assigned_at DateTime
+  
+  /// Timestamp when admin role was revoked. Null if currently active. Fulfills audit and security reversibility requirements for admin privileges.
+  revoked_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  administrator_member discussion_board_members @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  
+  @@unique([member_id])
+  @@index([assigned_at])
+}

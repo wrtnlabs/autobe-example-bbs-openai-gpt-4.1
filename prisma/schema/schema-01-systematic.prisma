@@ -1,0 +1,115 @@
+/// Discussion board channels - Implements the channel partitioning and top-level division requirement for the discussion platform (see section 3 of requirements analysis: Features & User Journeys, Thread & Post creation, browsing/search, multi-tiered access). This table allows the forum to be segmented into overarching channels (e.g., Politics, Economics) under which sections and discussions can be organized. Maintains strict 3NF compliance by storing only atomic, non-derived properties. For example, enables the board to have a "Politics" or "Economics" channel, each with their own categories and threads. Key relationships: referenced by sections and as entry points for content organization. Special behaviors: channel code is unique, soft deletion supported for reversibility.
+///
+/// @namespace Systematic
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_channels {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique channel identifier for internal reference, used throughout the board's system for relationships and indexing.
+  id String @id
+  
+  /// Code for the channel - Implements unique channel addressing as required by multi-channel design. Used for URLs or internal routing (e.g., 'pol', 'eco'). Ensures normalization by not repeating names; links to sections and system routing. Example: 'eco'.
+  code String
+  
+  /// Human-readable channel name - The full descriptive name for display and selection (e.g., 'Politics', 'Economics'). Ensures atomic representation of the channel label. Directly surfaced in admin/UI selection.
+  name String
+  
+  /// Channel description - Implements requirement for discoverability and clarity. Shown in listings, aids in search and context for users. Purely informational; maintaining normalization by not repeating section/category descriptions. Example: 'Discussion of global economic issues.'.
+  description String?
+  
+  /// Timestamp when channel was created - Implements auditability requirement. Maintains normalization by recording only creation event. Used for admin/audit views. Example: '2024-07-22T20:32:00Z'.
+  created_at DateTime
+  
+  /// Last update timestamp - Auditing/moderation conformity. Used for system logs and reflecting latest channel changes per non-functional security and audit requirements.
+  updated_at DateTime
+  
+  /// Soft delete timestamp for channel - Implements requirement for reversibility and audit trail of admin/mod actions. Null if not deleted. Used to support undo and regulatory compliance. Example: '2025-07-20T15:01:00Z' or null.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  discussion_board_sections discussion_board_sections[]
+  
+  @@unique([code])
+  @@index([created_at])
+  @@index([updated_at])
+}
+
+/// Discussion board sections - Implements the requirement for sub-division within channels (see feature requirements: Thread & Post Creation, Section/Forum hierarchy). Each section exists within a channel, allowing granular organization (e.g., 'Legislation', 'Global Markets'). 3NF compliance maintained by isolating only section attributes in this entity. For example, a section 'Legislation' under 'Politics' channel. Sections directly reference their parent channel. Key relationships: belongs to a channel, parent to threads/posts (handled in other components). Special behaviors: unique section code within a channel, soft deletion supported.
+///
+/// @namespace Systematic
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_sections {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique section identifier (UUID). Used as the reference for all section-level operations and relations.
+  id String @id
+  
+  /// Belonged channel's {@link discussion_board_channels.id} - Associates this section with a parent channel. Enforces 1:N relationship. Required, not nullable. Example: points 'Legislation' under 'Politics' channel.
+  discussion_board_channel_id String
+  
+  /// Unique section code within channel - Used for routing and management (e.g., 'legis', 'markets'). Unique per channel. Maintains normalization; not repeated in other entities. Example: 'legis'.
+  code String
+  
+  /// Section name - Implements user-facing display and admin management. Pure atomic value. Example: 'Legislation'. Used in UI, filtering, and management tools.
+  name String
+  
+  /// Section description - Supports user discoverability, as required for guided navigation. Example: 'Debate on government legislation.' Maintains normalization by avoiding duplication across sections/channels.
+  description String?
+  
+  /// Section creation timestamp - Implements record traceability as per audit requirements. Used for admin views. Example: '2024-07-22T20:44:00Z'.
+  created_at DateTime
+  
+  /// Last modified timestamp for the section - For audit/compliance and UI sorting as per non-functional requirements.
+  updated_at DateTime
+  
+  /// Soft delete timestamp - Implements reversibility of moderation/admin actions. Null if never deleted. Purely for compliance and undo.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  channel discussion_board_channels @relation(fields: [discussion_board_channel_id], references: [id], onDelete: Cascade)
+  
+  @@unique([discussion_board_channel_id, code])
+  @@index([discussion_board_channel_id])
+  @@index([created_at])
+  @@index([updated_at])
+}
+
+/// Discussion board configuration key-values - Implements the requirement for tunable system-wide settings and feature flags (see administrative/technical requirements). This enables administrators to control platform behavior dynamically (e.g., posting limits, enabled feature toggles, UI settings) without code deployments. 3NF enforced by storing atomic key-value pairs, not embedding configuration across multiple tables. For example, can store 'max_post_length', 'allow_guest_voting', etc. Relationships: none (global settings); referenced at runtime. Special behaviors: keys are unique, values are simple strings/JSON-serializable.
+///
+/// @namespace Systematic
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_configurations {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique configuration row identifier.
+  id String @id
+  
+  /// Configuration setting key - Implements the global configuration requirement. Used as the identifier for lookups/updates. Example: 'max_post_length'. Uniqueness enforced platform-wide. Maintains normalization by not repeating in multiple places.
+  key String
+  
+  /// Configuration value - Implements the actual set value for the configuration key. May be JSON or string. Atomic data element. Example: '10000', '{"enable":true}'.
+  value String
+  
+  /// Description of what this configuration controls - Provides admin-facing understanding of each configuration. Example: 'Sets the maximum number of characters allowed in a post.' Used in admin dashboards only. Maintains normalization and documentation integrity.
+  description String?
+  
+  /// Configuration created at - Traceability and audit, per system and compliance requirements. Example: '2024-07-22T20:56:00Z'.
+  created_at DateTime
+  
+  /// Timestamp for last update to this configuration - For audit trails and system config management.
+  updated_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  @@unique([key])
+  @@index([created_at])
+  @@index([updated_at])
+}

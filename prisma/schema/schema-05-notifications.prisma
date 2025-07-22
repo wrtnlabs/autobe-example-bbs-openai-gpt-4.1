@@ -1,0 +1,121 @@
+/// Discussion Board Notification Entity - This implements F07 (Notifications) from the requirements document.
+///
+/// This table stores notification events for users, representing a discrete alert or message triggered by activity (such as replies, mentions, moderation actions, or subscriptions) intended for a user. Maintains 3NF by only storing atomic, event-specific data. For example, when a member is mentioned in a reply, a new notification is generated referencing the relevant post. Key relationships: links recipients (members) and actors who trigger events. Special behaviors: Soft-deletion, delivery, and read-tracking.
+///
+/// @namespace Notifications
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_notifications {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for each notification event.
+  id String @id
+  
+  /// Recipient's {@link discussion_board_members.id} - The member who receives the notification. Implements user notifications (F07).
+  recipient_member_id String
+  
+  /// Initiator's {@link discussion_board_members.id} - The user who performed the action triggering the notification (e.g., commenter, moderator). Nullable for system notifications.
+  trigger_actor_id String?
+  
+  /// Type/Category of the notification (e.g., reply, mention, moderation, subscription). Implements notification type from requirements F07.
+  type String
+  
+  /// Short text preview of the event that caused the notification (e.g., comment excerpt, post title). Atomic, non-derived data to comply with 3NF.
+  content_preview String?
+  
+  /// Link to the resource/content associated with the notification (thread, comment, moderation action). Normalized as a URI for direct navigation. Implements context from functional requirements (F07).
+  url String
+  
+  /// Flag indicating if the notification has been read by the user. Enables accurate UX state and compliance with UX requirements.
+  read Boolean
+  
+  /// Timestamp when notification delivery was completed (in-app or email). For audit trails and delivery tracking.
+  delivered_at DateTime?
+  
+  /// Datetime when the notification was generated. For ordering, filtering, and audit trails.
+  created_at DateTime
+  
+  /// Soft-deletion timestamp for compliance, reversibility, and audit support. Null if active, set when deleted.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  recipient_member discussion_board_members @relation("discussion_board_notifications_of_recipient_member_id", fields: [recipient_member_id], references: [id], onDelete: Cascade)
+  trigger_actor_member discussion_board_members? @relation("discussion_board_notifications_of_trigger_actor_id", fields: [trigger_actor_id], references: [id], onDelete: Cascade)
+  
+  @@index([trigger_actor_id])
+  
+  @@index([recipient_member_id, read])
+  @@index([created_at])
+}
+
+/// Discussion Board Subscription Entity - Implements F07 (Notifications) and supports content follow/subscription flows. Tracks which members subscribe to which content (thread, section, tag, etc.), enabling notification delivery when followed content has new events. Maintains 3NF by only storing atomic member-to-content relations. Uniqueness enforced for (member, target type, target ID) per business rules.
+///
+/// @namespace Notifications
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_subscriptions {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for each subscription relationship.
+  id String @id
+  
+  /// Member {@link discussion_board_members.id} - The user subscribing to the resource. Implements personalized notification flows.
+  member_id String
+  
+  /// Type of resource being followed (e.g., thread, section, tag). Defines polymorphic subscription nature per requirements analysis and user journeys.
+  target_type String
+  
+  /// ID of the resource being followed (foreign key to thread/section/tag tables, not materialized in this file). Strictly normalized so only atomic linking occurs here.
+  target_id String
+  
+  /// Datetime when subscription was created. For sorting/filtering and retention/audit requirements.
+  created_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  member discussion_board_members @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  
+  @@unique([member_id, target_type, target_id])
+  @@index([member_id])
+  @@index([created_at])
+}
+
+/// Discussion Board Mention Entity - Implements F07 (Notifications) for '@mention' events as documented in requirements. Each record is an instance of a member being mentioned (e.g., via '@username') in a post, comment, or thread. Strictly atomic: links mention actor, target, and referenced content only. Used to drive mention notifications and auditing. Uniqueness constraint ensures single mentions per content context.
+///
+/// @namespace Notifications
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_mentions {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for each mention event.
+  id String @id
+  
+  /// Target's {@link discussion_board_members.id} - The user who was mentioned. Implements target for mention notifications.
+  mentioned_member_id String
+  
+  /// Mentioner's {@link discussion_board_members.id} - The user who performed the mention action. Traceability for originator.
+  actor_member_id String
+  
+  /// Type of content where the mention occurred (e.g., post, comment, thread), supporting polymorphic relations as per requirements.
+  content_type String
+  
+  /// ID of the content (post/comment/thread) where the mention was made. Enforces normalization as only atomic foreign link.
+  content_id String
+  
+  /// Datetime mention was created. For chronological and notification tracking.
+  created_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  mentioned_member discussion_board_members @relation("discussion_board_mentions_of_mentioned_member_id", fields: [mentioned_member_id], references: [id], onDelete: Cascade)
+  actor_member discussion_board_members @relation("discussion_board_mentions_of_actor_member_id", fields: [actor_member_id], references: [id], onDelete: Cascade)
+  
+  @@unique([actor_member_id, mentioned_member_id, content_type, content_id])
+  @@index([mentioned_member_id])
+  @@index([created_at])
+}

@@ -1,1 +1,1 @@
-export * as attendance from "./attendance";
+export * as discussionBoard from "./discussionBoard";

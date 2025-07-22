@@ -1,0 +1,198 @@
+/// Discussion Board Reports - Implements reporting/flagging requirements (Requirement F08) from the requirements doc. Allows members to flag content for moderator review. Fully normalized (3NF): one row per report, atomic fields for each responsibility. Used for moderation triage and compliance audit trails. Key relationships: member who reported, target content (thread/post/comment), assigned moderator/action. Audit trail and status tracking. Example: a member reports a spam comment. Special: supports soft delete, flexible target fields.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_reports {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for the report record.
+  id String @id
+  
+  /// Reporter member's {@link discussion_board_members.id}. Indicates who submitted this report.
+  reporter_member_id String
+  
+  /// Assigned/reviewing moderator's {@link discussion_board_moderators.id}. Nullable until a moderator claims the report.
+  moderator_id String?
+  
+  /// Reported thread {@link discussion_board_threads.id} (used if this is a thread report, otherwise null).
+  thread_id String?
+  
+  /// Reported post {@link discussion_board_posts.id} (used if this is a post report, otherwise null).
+  post_id String?
+  
+  /// Reported comment {@link discussion_board_comments.id} (used if this is a comment report, otherwise null).
+  comment_id String?
+  
+  /// Reason for reporting - Required; textual explanation why this was flagged (e.g., 'spam', 'offensive'). 3NF: atomic motivation, not free-form moderation notes.
+  reason String
+  
+  /// Moderation/report workflow state (e.g., 'pending','under_review','resolved','dismissed'). Used for state-machine mod UI compliance. Required.
+  status String
+  
+  /// Report creation timestamp for audit/ordering.
+  created_at DateTime
+  
+  /// When this report was resolved/closed. Nullable until action taken.
+  resolved_at DateTime?
+  
+  /// Moderator notes upon resolution (optional, used for moderation audit/comms). Nullable.
+  resolution_notes String?
+  
+  /// Soft-delete timestamp (nullable unless deleted); for GDPR/audit compliance.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  fk_reports_reporter_member_id discussion_board_members @relation(fields: [reporter_member_id], references: [id], onDelete: Cascade)
+  fk_reports_moderator_id discussion_board_moderators? @relation(fields: [moderator_id], references: [id], onDelete: Cascade)
+  fk_reports_thread_id discussion_board_threads? @relation(fields: [thread_id], references: [id], onDelete: Cascade)
+  fk_reports_post_id discussion_board_posts? @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  fk_reports_comment_id discussion_board_comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  
+  @@index([moderator_id])
+  @@index([thread_id])
+  @@index([post_id])
+  @@index([comment_id])
+  
+  @@index([created_at])
+  @@index([status])
+  @@index([reporter_member_id, created_at])
+}
+
+/// Discussion Board Moderation Logs - Implements moderation trace/audit requirements (Requirement F04, NFR logging/traceability) from requirements doc. One record per discrete mod action. Fully normalized (3NF): atomic action, FK moderator and content, no duplication. Used for post-event review and role compliance. Example: hiding a thread for ToS breach. Key: links moderator, atomic action, and target (any of thread/post/comment, or null for cross-content actions). Special: always immutable after write—permanent record.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_moderation_logs {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for moderation log record.
+  id String @id
+  
+  /// Moderator who took this action - {@link discussion_board_moderators.id}.
+  moderator_id String
+  
+  /// Target thread {@link discussion_board_threads.id} (nullable if this is not on a thread).
+  thread_id String?
+  
+  /// Target post {@link discussion_board_posts.id} (nullable if not applicable).
+  post_id String?
+  
+  /// Target comment {@link discussion_board_comments.id} (nullable unless a comment).
+  comment_id String?
+  
+  /// Action performed (e.g., 'hide','delete','warn','edit'). Each log is a single event. Required.
+  action String
+  
+  /// Reason/justification for action. Optional/free-form for additional transparency in logs. Nullable.
+  action_reason String?
+  
+  /// Timestamp when the moderation event occurred. Required.
+  created_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  fk_modlog_moderator_id discussion_board_moderators @relation(fields: [moderator_id], references: [id], onDelete: Cascade)
+  fk_modlog_thread_id discussion_board_threads? @relation(fields: [thread_id], references: [id], onDelete: Cascade)
+  fk_modlog_post_id discussion_board_posts? @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  fk_modlog_comment_id discussion_board_comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  
+  @@index([thread_id])
+  @@index([post_id])
+  @@index([comment_id])
+  
+  @@index([created_at])
+  @@index([moderator_id, created_at])
+}
+
+/// Discussion Board Warnings - Implements formal user warning tracking (Req F04: user management). Each record logs a warning from moderator to member. 3NF: member, moderator, rationale separated and atomic. Drives escalation/ban logic. Key relations: target member and acting moderator FKs. Example: warning for spam/harassment. Soft delete and optional expiry supported.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_warnings {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for warning record.
+  id String @id
+  
+  /// Warned member's {@link discussion_board_members.id}. Target of the warning.
+  member_id String
+  
+  /// Moderator who issued the warning {@link discussion_board_moderators.id}.
+  moderator_id String
+  
+  /// Type/category of warning (e.g., 'spam','harassment'). Atomic, avoids mixing categorization with rationale. Required.
+  warning_type String
+  
+  /// Moderator's message to member. Human-facing rationale, not for system logic. Required.
+  message String
+  
+  /// When the warning was issued. Required for escalation logic/audit trail.
+  created_at DateTime
+  
+  /// Optional expiry time (if the warning has an expiration). Nullable for permanent warnings.
+  expires_at DateTime?
+  
+  /// Soft delete timestamp (nullable unless deleted/expired for GDPR).
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  fk_warn_member_id discussion_board_members @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  fk_warn_moderator_id discussion_board_moderators @relation(fields: [moderator_id], references: [id], onDelete: Cascade)
+  
+  @@index([moderator_id])
+  
+  @@index([created_at])
+  @@index([member_id, created_at])
+}
+
+/// Discussion Board Bans - Implements user exclusion/ban process (Req F04: removal/escalation). Each row is a single ban event (either permanent or temporary). Fully normalized: reason, scope, timeline atomic and FK relations. Used for automated and manual enforcement of community guidelines. Key: member, moderator, fully documented scope/dates. Example: ban after multiple warnings. Nullable expires_at for permanent bans. Audit trail and soft-delete compliant.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_bans {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for the ban record.
+  id String @id
+  
+  /// Banned member {@link discussion_board_members.id}. Target user.
+  member_id String
+  
+  /// Moderator who imposed the ban {@link discussion_board_moderators.id}.
+  moderator_id String
+  
+  /// Explanation for the ban (e.g., 'multiple ToS violations'). Atomic, required.
+  ban_reason String
+  
+  /// Is this ban permanent? true if no expires_at, else false. Required.
+  permanent Boolean
+  
+  /// Timestamp when the ban was imposed. Audit/fairness use. Required.
+  created_at DateTime
+  
+  /// When this ban expires (null = permanent). For enforcement automation.
+  expires_at DateTime?
+  
+  /// Soft-delete timestamp (nullable unless lifted/expired for GDPR/audit).
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  fk_ban_member_id discussion_board_members @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  fk_ban_moderator_id discussion_board_moderators @relation(fields: [moderator_id], references: [id], onDelete: Cascade)
+  
+  @@index([moderator_id])
+  
+  @@index([created_at])
+  @@index([member_id, created_at])
+}
