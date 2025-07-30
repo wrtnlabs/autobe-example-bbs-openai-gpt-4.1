@@ -1,4 +1,56 @@
-/// Discussion Thread - This implements requirements F01, F02, F06 from the requirements analysis: Allows members to initiate new topical discussions and enables all users to view public threads. Business explanation: A thread is the main top-level discussion unit containing posts. Maintains 3NF compliance by storing only thread metadata and references to posts, categories, tags, and creator. For example, members start new threads; everyone can browse them; threads can be searched or filtered. Key relationships: references to discussion_board_members (creator), discussion_board_categories, possible cross-linking with tags, posts. Special behaviors: Title full-text search, thread must be open or closed (soft-delete for moderation, not hard delete).
+/// Topics on the discussion board - Implements the requirements for topic and thread management from the Features & Workflow documentation, supporting the creation and organization of main discussion areas. This model allows users to see a list of topics, and admins/moderators to manage (pin, close, delete) topics. Maintains 3NF compliance by keeping only atomic, non-aggregated data with referential integrity for creator, category, and status. Key relationships: category (to discussion_board_categories) and creator (to discussion_board_members). Special behaviors: topics may be pinned, closed, or deleted; closure restricts new posts at thread level.
+///
+/// @namespace Articles
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_topics {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key. Unique identifier for each topic.
+  id String @id
+  
+  /// Category association – References the parent category's {@link discussion_board_categories.id} for hierarchical topic organization.
+  discussion_board_category_id String
+  
+  /// Creator member – References the member's {@link discussion_board_members.id} who created the topic, needed for audit trail and permissions enforcement.
+  creator_member_id String
+  
+  /// Topic title - Short text for headline display. Atomic, normalized.
+  title String
+  
+  /// Topic description - Provides summary or guidelines for the topic. Optional, can be null for brief topics.
+  description String?
+  
+  /// Indicates if topic is pinned.
+  pinned Boolean
+  
+  /// Indicates if topic is closed.
+  closed Boolean
+  
+  /// Timestamp of topic creation.
+  created_at DateTime
+  
+  /// Timestamp of last update to the topic.
+  updated_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  category discussion_board_categories @relation(fields: [discussion_board_category_id], references: [id], onDelete: Cascade)
+  creator_member discussion_board_members @relation(fields: [creator_member_id], references: [id], onDelete: Cascade)
+  
+  discussion_board_threads discussion_board_threads[]
+  discussion_board_activity_logs discussion_board_activity_logs[]
+  discussion_board_engagement_stats discussion_board_engagement_stats[]
+  
+  @@index([creator_member_id])
+  
+  @@unique([discussion_board_category_id, title])
+  @@index([created_at])
+  @@index([pinned])
+}
+
+/// Threads within a topic - Implements threaded sub-discussions for separate conversations under one topic. Each thread belongs to a topic, and to a creator member. Fully normalized. Closure of parent topic invalidates new threads/posts.
 ///
 /// @namespace Articles
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
@@ -6,56 +58,40 @@ model discussion_board_threads {
   //----
   // COLUMNS
   //----
-  /// Primary Key. Uniquely identifies each thread record.
+  /// Primary Key. Unique identifier for each thread.
   id String @id
   
-  /// Creator's {@link discussion_board_members.id}. Links the thread to the member who created it.
-  discussion_board_member_id String
+  /// Parent topic – References {@link discussion_board_topics.id}, linking thread to its top-level area.
+  discussion_board_topic_id String
   
-  /// Category's {@link discussion_board_categories.id}. Links the thread to its topic category.
-  discussion_board_category_id String
+  /// Thread starter – References the member's {@link discussion_board_members.id} who created the thread.
+  creator_member_id String
   
-  /// Thread Title - Implements F01, F02, F06. The descriptive title of the discussion, used for search, browsing, and filtering. Ensures normalization by separating the thread's identity from post content. For example: '2025 National Budget Analysis'. Cannot be null.
+  /// Thread title - User-provided, atomic.
   title String
   
-  /// Thread Body - Implements F01, F02. The initial content of the thread (opening post). Provides context for members and is indexed for full-text search. For example: An analysis or question posed for discussion. Cannot be null.
-  body String
-  
-  /// Pinned Flag - Implements moderation requirement F04. Indicates if moderators/admins have pinned this thread for visibility. Ensures normalization by using an atomic boolean rather than flagging / status field. For example: a thread is pinned to top for community reference.
-  is_pinned Boolean
-  
-  /// Closed Flag - Implements moderation requirement for restricting new posts (F04). Indicates if no further posts/comments can be added. Ensures normalization by using atomic flag. For example: Off-topic/completed threads may be closed by a moderator. Cannot be null.
-  is_closed Boolean
-  
-  /// Creation Timestamp - Records when the thread was created. Required for audit, sorting, and moderation. Ensures atomic representation of time.
+  /// Timestamp when thread created.
   created_at DateTime
   
-  /// Update Timestamp - Records last update to thread metadata (not posts/comments). Maintains normalization by tracking only thread-level changes.
+  /// Timestamp of last update/modification.
   updated_at DateTime
-  
-  /// Soft-delete Timestamp - Implements F04 for reversible moderation actions. If set, the thread is considered deleted but can be restored. Fulfills business need for reversible actions. Nullable as not all threads are deleted.
-  deleted_at DateTime?
   
   //----
   // RELATIONS
   //----
-  member_threads discussion_board_members @relation(fields: [discussion_board_member_id], references: [id], onDelete: Cascade)
-  category_threads discussion_board_categories @relation(fields: [discussion_board_category_id], references: [id], onDelete: Cascade)
+  topic discussion_board_topics @relation(fields: [discussion_board_topic_id], references: [id], onDelete: Cascade)
+  creator_member discussion_board_members @relation(fields: [creator_member_id], references: [id], onDelete: Cascade)
   
   discussion_board_posts discussion_board_posts[]
-  discussion_board_reports discussion_board_reports[]
-  discussion_board_moderation_logs discussion_board_moderation_logs[]
-  discussion_board_votes discussion_board_votes[]
+  discussion_board_activity_logs discussion_board_activity_logs[]
   
-  @@index([discussion_board_member_id])
-  @@index([discussion_board_category_id])
+  @@index([creator_member_id])
   
-  @@unique([title, discussion_board_category_id])
-  @@index([created_at])
-  @@index([is_pinned, created_at])
+  @@unique([discussion_board_topic_id, title])
+  @@index([discussion_board_topic_id, created_at], map: "discussion_board_threads_discussion_board_topic_id_cre_1d94f0ec")
 }
 
-/// Discussion Board Post - Implements F02, F03 from requirements analysis: Enables members to add content within threads (as root or reply posts). Business explanation: A post is either the thread's opening message or a subsequent reply (can be a 'main' post or be used for splitting off sub-topics). Maintains 3NF: post content, author, thread are atomic. For example: User A posts detailed argument in thread. Key relationships: linked to thread, author (member), and can have attachments. Special behaviors: Soft-delete for moderation, no calculated fields, auditing via timestamps.
+/// Atomic posts in discussion threads - Implements posting and commenting functionality. Each post is an individual contribution to a thread and references its creator and thread. Designed for atomic, normalized content. Soft-deletion handled by deleted_at. No aggregation of comment count/etc.
 ///
 /// @namespace Articles
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
@@ -63,152 +99,122 @@ model discussion_board_posts {
   //----
   // COLUMNS
   //----
-  /// Primary Key. Uniquely identifies each post record.
+  /// Primary Key. Unique identifier for each post.
   id String @id
   
-  /// Parent Thread's {@link discussion_board_threads.id}. Associates this post with its parent discussion thread. Required for all posts.
+  /// Parent thread – References {@link discussion_board_threads.id}.
   discussion_board_thread_id String
   
-  /// Creator's {@link discussion_board_members.id}. Refers to the member who authored this post.
-  discussion_board_member_id String
+  /// Post author – References {@link discussion_board_members.id}.
+  creator_member_id String
   
-  /// Post Body - Main content of the post, implements F02, F03. Users express ideas, arguments, or questions here. Ensures normalization (atomic post content, not mixed thread data). For example: A member writes a reply in a debate. Cannot be null.
+  /// Post body - Markdown/atomic text. Not calculated.
   body String
   
-  /// Edit Flag - Indicates if the content was changed after creation. Maintains auditability in line with business rules. For example: Post shows 'edited' tag if changed.
+  /// Edit status - True if post edited. Atomic flag, 3NF compliant.
   is_edited Boolean
   
-  /// Creation Timestamp - When the post was created. Used for sort, moderation audit.
+  /// Time of post creation.
   created_at DateTime
   
-  /// Update Timestamp - When post content last updated. For moderation and client freshness.
+  /// Time of last update.
   updated_at DateTime
   
-  /// Soft-delete Timestamp - Implements F04 moderation rule for reversible deletions. Nullable.
+  /// Deletion timestamp if soft-deleted. Nullable.
   deleted_at DateTime?
   
   //----
   // RELATIONS
   //----
-  thread_posts discussion_board_threads @relation(fields: [discussion_board_thread_id], references: [id], onDelete: Cascade)
-  member_posts discussion_board_members @relation(fields: [discussion_board_member_id], references: [id], onDelete: Cascade)
+  thread discussion_board_threads @relation(fields: [discussion_board_thread_id], references: [id], onDelete: Cascade)
+  creator_member discussion_board_members @relation(fields: [creator_member_id], references: [id], onDelete: Cascade)
   
+  discussion_board_post_versions discussion_board_post_versions[]
+  discussion_board_post_attachments discussion_board_post_attachments[]
   discussion_board_comments discussion_board_comments[]
-  discussion_board_attachments discussion_board_attachments[]
   discussion_board_reports discussion_board_reports[]
-  discussion_board_moderation_logs discussion_board_moderation_logs[]
-  discussion_board_votes discussion_board_votes[]
+  discussion_board_moderation_actions discussion_board_moderation_actions[]
+  discussion_board_content_flags discussion_board_content_flags[]
+  discussion_board_activity_logs discussion_board_activity_logs[]
   
-  @@index([discussion_board_member_id])
+  @@index([creator_member_id])
   
-  @@index([created_at])
-  @@index([discussion_board_thread_id, created_at])
+  @@index([discussion_board_thread_id, created_at], map: "discussion_board_posts_discussion_board_thread_id_crea_bf476e65")
 }
 
-/// Discussion Board Comment - Implements F03, F04, F08 from requirements. Allows members to add nested commentary on posts, supporting deep discussion. Maintains 3NF by referencing post, parent comment, and author atomically. For example: Members can reply to posts or create deeply threaded comments. Key relationships: references discussion_board_posts, self (parent_id), and discussion_board_members. Special behaviors: Soft-delete for moderation, edit tracking, supports full-text search for moderation/retrieval.
+/// Snapshots of post revisions (version history/audit) - Implements snapshot-based architecture for post edit tracking, supporting rollback and audit history. Each entry stores a snapshot of the post content and incrementing version number. No aggregation. Each version is linked to an editor and to the associated post.
 ///
 /// @namespace Articles
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_comments {
+model discussion_board_post_versions {
   //----
   // COLUMNS
   //----
-  /// Primary Key. Uniquely identifies each comment.
+  /// Primary Key. Unique, immutable identifier for each versioned snapshot.
   id String @id
   
-  /// Parent Post's {@link discussion_board_posts.id}. Links the comment to the post it references. Required.
+  /// Target post – References {@link discussion_board_posts.id}.
   discussion_board_post_id String
   
-  /// Parent Comment's {@link discussion_board_comments.id}. Supports nested (threaded) comments. Nullable for root-level comments.
-  parent_id String?
+  /// Editor responsible for this version – References {@link discussion_board_members.id}.
+  editor_member_id String
   
-  /// Comment Creator's {@link discussion_board_members.id}. Identifies the member who wrote the comment. Required.
-  discussion_board_member_id String
+  /// Version number - Starts at 1, increments per edit.
+  version Int
   
-  /// Comment Body - Implements F03, F08. Contains the textual or media commentary, normalized to separate from parent entities. For example: Member writes 'I disagree with this point...' in reply to a post or another comment. Cannot be null.
+  /// Snapshot of post content.
   body String
   
-  /// Edit Flag - True if content was modified after creation. Maintains clarity for users reading historical comments.
-  is_edited Boolean
-  
-  /// Creation Timestamp - When the comment was submitted. Used for sorting, moderation, audits.
+  /// Timestamp when version created.
   created_at DateTime
-  
-  /// Update Timestamp - When the comment was last edited. Supports moderation audit trails.
-  updated_at DateTime
-  
-  /// Soft-delete Timestamp - For moderation reversibility. Nullable.
-  deleted_at DateTime?
   
   //----
   // RELATIONS
   //----
-  post_comments discussion_board_posts @relation(fields: [discussion_board_post_id], references: [id], onDelete: Cascade)
-  parent_comment discussion_board_comments? @relation("recursive", fields: [parent_id], references: [id], onDelete: Cascade)
-  member_comments discussion_board_members @relation(fields: [discussion_board_member_id], references: [id], onDelete: Cascade)
+  post discussion_board_posts @relation(fields: [discussion_board_post_id], references: [id], onDelete: Cascade)
+  editor_member discussion_board_members @relation(fields: [editor_member_id], references: [id], onDelete: Cascade)
   
-  recursive discussion_board_comments[] @relation("recursive")
-  discussion_board_attachments discussion_board_attachments[]
-  discussion_board_reports discussion_board_reports[]
-  discussion_board_moderation_logs discussion_board_moderation_logs[]
-  discussion_board_votes discussion_board_votes[]
-  
-  @@index([parent_id])
-  @@index([discussion_board_member_id])
-  
-  @@index([created_at])
-  @@index([discussion_board_post_id, created_at])
+  @@unique([discussion_board_post_id, version], map: "discussion_board_post_versions_discussion_board_post_i_bcb5ae9c")
+  @@index([editor_member_id, created_at])
 }
 
-/// Discussion Board Attachment - Implements F02 (posts) and F03 (comments) for supporting attached files with user submissions. Normalizes file references; each attachment belongs to either a post or a comment, never both. For example: a member uploads a PDF or image to support a post or a comment. Maintains 3NF by holding only attachment-specific metadata and foreign key to the parent object. Key relationships: optional links to discussion_board_posts or discussion_board_comments (one, never both). Special behaviors: Soft-delete for moderation, uniqueness enforced on content hash for deduplication.
+/// Attachment files for posts - Stores pure file/link metadata with reference to its post. Files are stored externally as URIs. Soft deletes handled via post or by removing external file, not by field aggregation. Each attachment links to both the post and uploader member.
 ///
 /// @namespace Articles
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_attachments {
+model discussion_board_post_attachments {
   //----
   // COLUMNS
   //----
-  /// Primary Key. Uniquely identifies each attachment record.
+  /// Primary Key. Unique identifier for each attachment.
   id String @id
   
-  /// Attached Post's {@link discussion_board_posts.id}. If not null, the attachment is linked to a post. Nullable to support comment attachments.
-  discussion_board_post_id String?
+  /// Associated post – References {@link discussion_board_posts.id}.
+  discussion_board_post_id String
   
-  /// Attached Comment's {@link discussion_board_comments.id}. If not null, this attachment is linked to a comment. Nullable to support post attachments.
-  discussion_board_comment_id String?
+  /// Uploader – References {@link discussion_board_members.id}.
+  uploader_member_id String
   
-  /// Uploader's {@link discussion_board_members.id}. Tracks the member who uploaded the attachment. Required.
-  discussion_board_member_id String
-  
-  /// Attachment File Name - Stores the original name of the uploaded file. Normalizes metadata storage. For example: 'research-data-2025.pdf'. Cannot be null.
-  file_name String
-  
-  /// Attachment File URI - Points to the file's storage location (S3, CDN, etc). Maintains atomic data management without storing file content. For example: 'https://cdn.site.com/files/1234.pdf'. Cannot be null.
+  /// Location of the attachment file (external or CDN URI). Atomic, normalized.
   file_uri String
   
-  /// Mime Content Type - Describes file format for retrieval. For example: 'application/pdf', 'image/png'. Maintains normalization. Cannot be null.
-  content_type String
+  /// Original file name. Plain text, atomic.
+  file_name String
   
-  /// Content Hash - Implements uniqueness; stores file SHA-256 or similar fingerprint for deduplication. For example: 'ab12cd34...'. Cannot be null.
-  content_hash String
+  /// Attachment MIME type. E.g., 'image/png'.
+  mime_type String
   
-  /// Upload Timestamp - Records when attachment was added. For audit/tracing. Cannot be null.
-  created_at DateTime
-  
-  /// Soft-delete Timestamp - Implements F04 for reversible moderation actions. Nullable as not all attachments are deleted.
-  deleted_at DateTime?
+  /// Timestamp when file uploaded. Atomic event.
+  uploaded_at DateTime
   
   //----
   // RELATIONS
   //----
-  post_attachments discussion_board_posts? @relation(fields: [discussion_board_post_id], references: [id], onDelete: Cascade)
-  comment_attachments discussion_board_comments? @relation(fields: [discussion_board_comment_id], references: [id], onDelete: Cascade)
-  member_attachments discussion_board_members @relation(fields: [discussion_board_member_id], references: [id], onDelete: Cascade)
+  post discussion_board_posts @relation(fields: [discussion_board_post_id], references: [id], onDelete: Cascade)
+  uploader_member discussion_board_members @relation(fields: [uploader_member_id], references: [id], onDelete: Cascade)
   
   @@index([discussion_board_post_id])
-  @@index([discussion_board_comment_id])
-  @@index([discussion_board_member_id])
+  @@index([uploader_member_id])
   
-  @@unique([content_hash])
-  @@index([created_at])
+  @@index([uploaded_at])
 }

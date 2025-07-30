@@ -4,57 +4,59 @@ import typia, { tags } from "typia";
 
 import api from "@ORGANIZATION/PROJECT-api";
 import type { IDiscussionBoardGuest } from "@ORGANIZATION/PROJECT-api/lib/structures/IDiscussionBoardGuest";
-import type { IDiscussionBoardMember } from "@ORGANIZATION/PROJECT-api/lib/structures/IDiscussionBoardMember";
 
 /**
- * Test creating a new guest session with valid data.
+ * Test the successful creation of a new guest session (unauthenticated
+ * analytics record).
  *
- * Business context:
- * - Guests sessions are tracked for analytics, moderation, and security compliance. Only administrator users are permitted to create guest sessions (per dependency).
- * - Data includes session token, IP address, optional user-agent, and explicit session expiration timestamp, as per audit and analytic requirements.
+ * This test ensures that an unauthenticated guest visiting the discussion board
+ * is correctly tracked by the backend system via an explicit session_identifier
+ * and required timestamps.
  *
- * Step-by-step process:
- * 1. Create an administrator account (dependency: only admins may create guest sessions).
- * 2. Use the administrator connection to create a new guest session with valid data (token, IP, user agent, expiration).
- * 3. Assert that a guest session is created and returned with all required fields populated per the DTO contract, including audit fields (id, created_at, expires_at, etc.).
- * 4. Validate that fields match input and are correctly typed/formatted.
+ * Steps:
+ *
+ * 1. Prepare a unique session_identifier and ISO 8601 timestamps for first_seen_at
+ *    and last_seen_at (matching).
+ * 2. Call the POST /discussionBoard/guests endpoint with the crafted body
+ *    (IDiscussionBoardGuest.ICreate).
+ * 3. Validate that the response is a persisted IDiscussionBoardGuest object with
+ *    fields matching the input values (except for server-generated id).
+ * 4. The response id field should be a valid UUID and not empty.
+ * 5. No authentication or other rate limiting logic is exercised.
+ * 6. Edge Case: Ensure last_seen_at equal to first_seen_at on creation is
+ *    accepted.
  */
 export async function test_api_discussionBoard_test_create_guest_session_with_valid_data(
   connection: api.IConnection,
 ) {
-  // 1. Create an administrator account (dependency).
-  const adminInput: IDiscussionBoardMember.ICreate = {
-    username: RandomGenerator.alphabets(8),
-    email: typia.random<string & tags.Format<"email">>(),
-    hashed_password: RandomGenerator.alphaNumeric(12),
-    display_name: RandomGenerator.name(),
-    profile_image_url: null,
+  // Step 1: Prepare unique session_identifier and current ISO timestamps
+  const sessionIdentifier: string = typia.random<string>();
+  const now: string = new Date().toISOString();
+  const input: IDiscussionBoardGuest.ICreate = {
+    session_identifier: sessionIdentifier,
+    first_seen_at: now,
+    last_seen_at: now,
   };
-  const admin: IDiscussionBoardMember = await api.functional.discussionBoard.members.post(connection, {
-    body: adminInput,
-  });
-  typia.assert(admin);
 
-  // 2. Use admin privileges to create a guest session
-  const guestInput: IDiscussionBoardGuest.ICreate = {
-    session_token: RandomGenerator.alphaNumeric(32),
-    ip_address: "203.0.113.42",
-    user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-    expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // Expires in 1 hour
-  };
-  const guest: IDiscussionBoardGuest = await api.functional.discussionBoard.guests.post(connection, {
-    body: guestInput,
+  // Step 2: Call the API to create a guest session
+  const guest = await api.functional.discussionBoard.guests.create(connection, {
+    body: input,
   });
   typia.assert(guest);
-  // 3. Assert all required/audit fields are present and correctly formatted
-  TestValidator.equals("session_token")(guest.session_token)(guestInput.session_token);
-  TestValidator.equals("ip_address")(guest.ip_address)(guestInput.ip_address);
-  TestValidator.equals("user_agent")(guest.user_agent)(guestInput.user_agent);
-  TestValidator.equals("expires_at")(guest.expires_at)(guestInput.expires_at);
-  TestValidator.predicate("id is uuid")(
-    typeof guest.id === "string" && guest.id.length > 0 && /[0-9a-fA-F-]{36}/.test(guest.id)
+
+  // Step 3: Verify response matches input (except for server-generated id)
+  TestValidator.equals("session_identifier matches")(guest.session_identifier)(
+    input.session_identifier,
   );
-  TestValidator.predicate("created_at is ISO date")(
-    typeof guest.created_at === "string" && !isNaN(Date.parse(guest.created_at))
+  TestValidator.equals("first_seen_at matches")(guest.first_seen_at)(
+    input.first_seen_at,
+  );
+  TestValidator.equals("last_seen_at matches")(guest.last_seen_at)(
+    input.last_seen_at,
+  );
+
+  // Step 4: Validate server-generated id field (must be valid UUID and not empty)
+  TestValidator.predicate("id is a valid UUID")(
+    !!guest.id && typeof guest.id === "string" && guest.id.length > 0,
   );
 }

@@ -3,89 +3,108 @@ import { IConnection } from "@nestia/fetcher";
 import typia, { tags } from "typia";
 
 import api from "@ORGANIZATION/PROJECT-api";
-import type { IDiscussionBoardMember } from "@ORGANIZATION/PROJECT-api/lib/structures/IDiscussionBoardMember";
-import type { IDiscussionBoardThread } from "@ORGANIZATION/PROJECT-api/lib/structures/IDiscussionBoardThread";
+import type { IDiscussionBoardTopics } from "@ORGANIZATION/PROJECT-api/lib/structures/IDiscussionBoardTopics";
+import type { IDiscussionBoardThreads } from "@ORGANIZATION/PROJECT-api/lib/structures/IDiscussionBoardThreads";
 import type { IDiscussionBoardPost } from "@ORGANIZATION/PROJECT-api/lib/structures/IDiscussionBoardPost";
 
 /**
- * Validate retrieving full details of a post by ID as a regular user.
+ * Validate retrieval of a discussion board post's details by a member.
  *
- * This test ensures that the get-by-id endpoint returns a fully correct post entity, including author, content, thread linkage, timestamps, and moderation flags, when queried with a valid post ID.
+ * This test verifies that after creating a topic, a thread under it, and a post
+ * within the thread, a member can fetch the full details of that post using its
+ * ID in the context of the thread. The test ensures:
  *
- * Steps:
- * 1. Create a discussion board member (the post author)
- * 2. Create a thread that the post will be attached to
- * 3. Create a root post in that thread
- * 4. Retrieve the post by its ID using the API endpoint
- * 5. Validate response: All metadata (IDs, author, thread), content, and audit fields match test values
- * 6. (Optional) Create a reply post and verify retrieval for a non-root post
- * 7. (Optional) If roles are feasible, attempt retrieval as admin/member
+ * 1. All relevant fields (id, thread, body, creator, timestamps, etc.) are
+ *    correctly present and aligned.
+ * 2. The contents (body and associations) match what was created.
+ * 3. The deleted_at field is null/undefined reflecting an active post.
+ * 4. Access permission logic is as expected for a normal member (successful
+ *    retrieval).
+ *
+ * Test Steps:
+ *
+ * 1. Create a topic.
+ * 2. Create a thread under the topic.
+ * 3. Create a post inside that thread.
+ * 4. Retrieve the post details by threadId and postId.
+ * 5. Validate all required and returned fields.
  */
 export async function test_api_discussionBoard_test_get_post_details_success(
   connection: api.IConnection,
 ) {
-  // 1. Create a discussion board member (author)
-  const memberEmail: string = typia.random<string & tags.Format<"email">>();
-  const author = await api.functional.discussionBoard.members.post(connection, {
-    body: {
-      username: RandomGenerator.alphaNumeric(10),
-      email: memberEmail,
-      hashed_password: RandomGenerator.alphaNumeric(20),
-      display_name: RandomGenerator.name(),
-      profile_image_url: null,
-    } satisfies IDiscussionBoardMember.ICreate,
-  });
-  typia.assert(author);
+  // 1. Create a topic
+  const topic = await api.functional.discussionBoard.member.topics.create(
+    connection,
+    {
+      body: {
+        title: RandomGenerator.paragraph()(),
+        description: RandomGenerator.content()()(),
+        pinned: false,
+        closed: false,
+        discussion_board_category_id: typia.random<
+          string & tags.Format<"uuid">
+        >(),
+      },
+    },
+  );
+  typia.assert(topic);
 
-  // 2. Create a thread
-  const thread = await api.functional.discussionBoard.threads.post(connection, {
-    body: {
-      discussion_board_member_id: author.id,
-      // Category id is required, but no API for categories, so random
-      discussion_board_category_id: typia.random<string & tags.Format<"uuid">>(),
-      title: RandomGenerator.paragraph()(),
-      body: RandomGenerator.content()()(),
-    } satisfies IDiscussionBoardThread.ICreate,
-  });
+  // 2. Create a thread under the topic
+  const thread =
+    await api.functional.discussionBoard.member.topics.threads.create(
+      connection,
+      {
+        topicId: topic.id,
+        body: {
+          title: RandomGenerator.paragraph()(),
+        },
+      },
+    );
   typia.assert(thread);
 
-  // 3. Create a root post in the thread
-  const rootPost = await api.functional.discussionBoard.posts.post(connection, {
-    body: {
-      discussion_board_thread_id: thread.id,
-      discussion_board_member_id: author.id,
-      body: RandomGenerator.paragraph()(),
-    } satisfies IDiscussionBoardPost.ICreate,
-  });
-  typia.assert(rootPost);
+  // 3. Create a post inside the thread
+  const postBody = RandomGenerator.content()()();
+  const post = await api.functional.discussionBoard.member.threads.posts.create(
+    connection,
+    {
+      threadId: thread.id,
+      body: {
+        discussion_board_thread_id: thread.id,
+        body: postBody,
+      },
+    },
+  );
+  typia.assert(post);
 
-  // 4. Retrieve the root post by id
-  const got = await api.functional.discussionBoard.posts.getById(connection, {
-    id: rootPost.id,
-  });
-  typia.assert(got);
-  TestValidator.equals("id")(got.id)(rootPost.id);
-  TestValidator.equals("body")(got.body)(rootPost.body);
-  TestValidator.equals("author")(got.discussion_board_member_id)(author.id);
-  TestValidator.equals("thread linkage")(got.discussion_board_thread_id)(thread.id);
+  // 4. Retrieve the post details by threadId and postId
+  const read = await api.functional.discussionBoard.member.threads.posts.at(
+    connection,
+    {
+      threadId: thread.id,
+      postId: post.id,
+    },
+  );
+  typia.assert(read);
 
-  // 5. (Optional) Create a reply post in the same thread
-  const replyPost = await api.functional.discussionBoard.posts.post(connection, {
-    body: {
-      discussion_board_thread_id: thread.id,
-      discussion_board_member_id: author.id,
-      body: RandomGenerator.content()()(),
-    } satisfies IDiscussionBoardPost.ICreate,
-  });
-  typia.assert(replyPost);
-  // 6. Retrieve reply post
-  const gotReply = await api.functional.discussionBoard.posts.getById(connection, {
-    id: replyPost.id,
-  });
-  typia.assert(gotReply);
-  TestValidator.equals("reply id")(gotReply.id)(replyPost.id);
-  TestValidator.equals("reply author")(gotReply.discussion_board_member_id)(author.id);
-  TestValidator.equals("reply thread linkage")(gotReply.discussion_board_thread_id)(thread.id);
-  TestValidator.equals("reply body")(gotReply.body)(replyPost.body);
-  // (If admin/member role switching supported by API, would repeat the above as those roles)
+  // 5. Validate fields and business logic
+  TestValidator.equals("id matches")(read.id)(post.id);
+  TestValidator.equals("thread id matches")(read.discussion_board_thread_id)(
+    thread.id,
+  );
+  TestValidator.equals("body matches")(read.body)(postBody);
+  TestValidator.equals("creator matches")(read.creator_member_id)(
+    post.creator_member_id,
+  );
+  TestValidator.equals("is_edited is false for new post")(read.is_edited)(
+    false,
+  );
+  TestValidator.predicate("created_at present")(
+    typeof read.created_at === "string" && read.created_at.length > 0,
+  );
+  TestValidator.predicate("updated_at present")(
+    typeof read.updated_at === "string" && read.updated_at.length > 0,
+  );
+  TestValidator.equals("deleted_at is null or undefined for active post")(
+    read.deleted_at === null || typeof read.deleted_at === "undefined",
+  )(true);
 }

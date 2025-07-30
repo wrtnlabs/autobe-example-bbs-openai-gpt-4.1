@@ -1,48 +1,44 @@
-# Discussion Board Documentation
+# Discussion Board Documentation: Table of Contents
 
-## Table of Contents
-
-1. [Introduction](./01_discussion_board_introduction.md)
-   - Purpose and Vision
-   - Business Objectives
-   - Target Audience
-   - Document Structure Overview
-
-2. [User Roles & Permissions](./02_discussion_board_user_roles_and_permissions.md)
-   - Role Descriptions
-   - Permissions Matrix
-   - Role-Based Access Control Scenarios
-
-3. [Features & User Journeys](./03_discussion_board_features_and_user_journeys.md)
-   - Core Features
-     - Topic Creation & Thread Management
-     - Posting, Commenting, and Voting
-     - Content Search & Filtering
-     - Notification System
-     - Tagging & Categorization
-     - Moderation Tools
-   - User Journeys
-     - Guest User Experience
-     - Registered Member Workflow
-     - Moderator and Admin Workflows
-
-4. [Requirements & Specifications](./04_discussion_board_requirements_and_specifications.md)
-   - Functional Requirements
-     - User Authentication & Authorization
-     - Posting/Moderation Logic
-     - Notification Scenarios
-     - Content Discovery & Management
-   - Non-Functional Requirements
-     - Security & Privacy Principles
-     - Usability & Accessibility
-     - Performance Considerations
-   - Acceptance Criteria
-   - Data Model & Entity-Relationship Diagram (ERD)
+This document provides a comprehensive table of contents (TOC) for the Discussion Board planning and requirements documentation suite. Each link below directs to vital aspects including business goals, user roles, workflows, detailed features, and technical considerations. Use this TOC to navigate the full documentation set.
 
 ---
 
-- **Quick References:**
-  - [User Roles Matrix](./02_discussion_board_user_roles_and_permissions.md#permissions-matrix)
-  - [User Journeys](./03_discussion_board_features_and_user_journeys.md#user-journeys)
+## Table of Contents
 
-This Table of Contents provides a comprehensive navigation map for all documentation pertaining to the discussion board system, facilitating rapid access to sections for planning, development, usage, and maintenance. Each listed file contains detailed sub-sections on its respective subjects.
+1. [Overview: Vision, Objectives, and Scope](./01_discussion_board_overview.md)
+   - Business context, purpose, and success criteria
+   - High-level project goals and KPIs
+   - Scope boundaries and constraints
+
+2. [Roles and Permissions](./02_discussion_board_roles_and_permissions.md)
+   - User categories: Admin, Moderator, Member, Guest
+   - Role-based access control
+   - Permission matrix (CRUD operations, moderation, analytics, reporting, etc.)
+
+3. [User Journeys and Use Cases](./03_discussion_board_user_journey_and_use_cases.md)
+   - Primary user flows for each role
+   - Typical scenarios, expected behaviors, and EARS-formatted requirements
+   - Non-functional expectations (usability, security, accessibility)
+
+4. [Features and Workflow Specifications](./04_discussion_board_features_and_workflow.md)
+   - Core discussion board features and their definitions
+   - State diagrams, sequence flows
+   - Workflow rules and exception handling (using EARS syntax)
+
+5. [API & Technical Considerations](./05_discussion_board_api_and_technical_considerations.md)
+   - High-level API endpoints and authentication requirements
+   - Input/output schemas and access restrictions
+   - Integration, scalability, and compliance strategies
+
+---
+
+## Roles & Audience
+This documentation is tailored for business planners, project managers, solution architects, and developers seeking a detailed, unambiguous requirements set for building and operating the discussion board platform.
+
+## Document Change History
+Any updates or revisions to this table of contents will be noted in the [project revision log](./revision_history.md) (when available).
+
+---
+
+> Use the links above to access detailed documentation for each area. For feedback or additions, consult the Overview or API & Technical Considerations sections. Is there anything else to refine or reorganize in this TOC?
