@@ -1,0 +1,314 @@
+/// Discussion threads serve as the top-level grouping mechanism for related
+/// posts and comments. Each thread represents a distinct discussion topic or
+/// theme, acting as the root node for all hierarchical content beneath it.
+/// Threads can be locked or archived for moderation purposes. Supports
+/// search by title, status, and created_by user. Soft deletion is supported
+/// for compliance.
+///
+/// @namespace Content
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_threads {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Creator's {@link discussion_board_users.id}. References the user who
+  /// started the thread.
+  created_by_id String @db.Uuid
+  
+  /// Title of the discussion thread, used for identification and search.
+  title String
+  
+  /// Whether the thread is currently locked for further posting or commenting.
+  is_locked Boolean
+  
+  /// Whether the thread has been archived. Archived threads are read-only.
+  is_archived Boolean
+  
+  /// Timestamp when the thread was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// Timestamp when the thread was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// When present, indicates the thread was soft deleted (hidden from general
+  /// view).
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  createdBy discussion_board_users @relation(fields: [created_by_id], references: [id], onDelete: Cascade)
+  
+  discussion_board_posts discussion_board_posts[]
+  
+  @@unique([title])
+  @@index([created_by_id])
+  @@index([created_at])
+}
+
+/// Posts are the primary content units within discussion threads. Each post
+/// belongs to a thread, can reference an author (user), and is subject to
+/// edit history tracking. Each post may be flagged, commented on, or
+/// moderated. Soft deletion is standard for user and regulatory compliance.
+///
+/// @namespace Content
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_posts {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Target thread's {@link discussion_board_threads.id}. Indicates thread
+  /// this post belongs to.
+  thread_id String @db.Uuid
+  
+  /// Author's {@link discussion_board_users.id}. Indicates the user who
+  /// submitted this post.
+  created_by_id String @db.Uuid
+  
+  /// Post title, used for identification within thread and for search.
+  title String
+  
+  /// Rich text body of the post content.
+  body String
+  
+  /// Whether this post is locked for editing or commenting.
+  is_locked Boolean
+  
+  /// Timestamp when the post was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// Timestamp when the post was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft delete timestamp; if set, post is not visible to regular users.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  thread discussion_board_threads @relation(fields: [thread_id], references: [id], onDelete: Cascade)
+  createdBy discussion_board_users @relation(fields: [created_by_id], references: [id], onDelete: Cascade)
+  
+  discussion_board_post_edit_histories discussion_board_post_edit_histories[]
+  discussion_board_comments discussion_board_comments[]
+  discussion_board_attachments discussion_board_attachments[]
+  discussion_board_votes discussion_board_votes[]
+  discussion_board_polls discussion_board_polls?
+  discussion_board_flag_reports discussion_board_flag_reports[]
+  discussion_board_moderation_actions discussion_board_moderation_actions[]
+  discussion_board_notifications discussion_board_notifications[]
+  
+  @@unique([thread_id, title])
+  @@index([thread_id, created_at])
+  @@index([created_by_id])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([body(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// Edit history (snapshot) table for posts. Stores previous versions of each
+/// post for audit, compliance, or moderation review. Each record is linked
+/// to the original post and contains the full previous snapshot of the
+/// post's contents. Append-only by design.
+///
+/// @namespace Content
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_post_edit_histories {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Target post's {@link discussion_board_posts.id} for which the snapshot is
+  /// stored.
+  post_id String @db.Uuid
+  
+  /// Reference to the user who performed the edit. {@link
+  /// discussion_board_users.id}
+  edited_by_id String @db.Uuid
+  
+  /// Snapshot of post title at the time of edit.
+  title String
+  
+  /// Snapshot of the post body at the time of edit.
+  body String
+  
+  /// Timestamp when this edit was made.
+  edited_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  post discussion_board_posts @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  editedBy discussion_board_users @relation(fields: [edited_by_id], references: [id], onDelete: Cascade)
+  
+  @@index([post_id])
+  @@index([edited_by_id])
+  @@index([edited_at])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([body(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// Comments are user responses to posts or, recursively, to other comments
+/// (nested up to 5 levels). Each comment belongs to a post and may
+/// optionally have a parent comment. Comments are independently manageable
+/// with full edit and moderation support. Soft deletion is required for
+/// auditability.
+///
+/// @namespace Content
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_comments {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Parent post {@link discussion_board_posts.id} to which this comment
+  /// belongs.
+  post_id String @db.Uuid
+  
+  /// Direct parent comment {@link discussion_board_comments.id} for nested
+  /// commenting (nullable for top-level comments).
+  parent_id String? @db.Uuid
+  
+  /// Author's {@link discussion_board_users.id} for this comment.
+  created_by_id String @db.Uuid
+  
+  /// Text content of the comment.
+  body String
+  
+  /// Level of nesting for this comment (max 5; 0 = top-level).
+  nesting_level Int @db.Integer
+  
+  /// Timestamp when comment was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// Timestamp when comment was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft delete timestamp (hidden from public but retained for
+  /// moderation/audit).
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  post discussion_board_posts @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  parent discussion_board_comments? @relation("recursive", fields: [parent_id], references: [id], onDelete: Cascade)
+  createdBy discussion_board_users @relation(fields: [created_by_id], references: [id], onDelete: Cascade)
+  
+  recursive discussion_board_comments[] @relation("recursive")
+  discussion_board_comment_edit_histories discussion_board_comment_edit_histories[]
+  discussion_board_attachments discussion_board_attachments[]
+  discussion_board_votes discussion_board_votes[]
+  discussion_board_flag_reports discussion_board_flag_reports[]
+  discussion_board_moderation_actions discussion_board_moderation_actions[]
+  discussion_board_notifications discussion_board_notifications[]
+  
+  @@index([post_id, created_at])
+  @@index([parent_id])
+  @@index([created_by_id])
+  @@index([body(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// Edit history (snapshot) table for comments. Records all previous versions
+/// of a comment for audit/audit-log compliance. Each record links to the
+/// original comment and editor. Append-only by design.
+///
+/// @namespace Content
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_comment_edit_histories {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Target comment's {@link discussion_board_comments.id} to which the
+  /// snapshot belongs.
+  comment_id String @db.Uuid
+  
+  /// User who performed the comment edit. {@link discussion_board_users.id}
+  edited_by_id String @db.Uuid
+  
+  /// Snapshot body at edit moment.
+  body String
+  
+  /// Edit timestamp for this snapshot record.
+  edited_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  comment discussion_board_comments @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  editedBy discussion_board_users @relation(fields: [edited_by_id], references: [id], onDelete: Cascade)
+  
+  @@index([comment_id])
+  @@index([edited_by_id])
+  @@index([edited_at])
+  @@index([body(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// Attachments hold metadata for files or media uploaded to posts/comments.
+/// Each attachment references either a post or a comment, but not both at
+/// once. Files may include images, documents, or media. Managed through
+/// parent content. Soft deletion is applied for compliance and moderation
+/// needs.
+///
+/// @namespace Content
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_attachments {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Associated post {@link discussion_board_posts.id}; nullable in case
+  /// attachment is for a comment instead.
+  post_id String? @db.Uuid
+  
+  /// Associated comment {@link discussion_board_comments.id}; nullable if
+  /// attached to a post instead.
+  comment_id String? @db.Uuid
+  
+  /// Uploader's {@link discussion_board_users.id}. User who added the file.
+  uploaded_by_id String @db.Uuid
+  
+  /// Original file name as uploaded by the user.
+  file_name String
+  
+  /// Permanent URL of the uploaded file or media for access.
+  file_url String @db.VarChar(80000)
+  
+  /// MIME type of the file for validation and access control.
+  content_type String
+  
+  /// Size of the file in bytes.
+  size_bytes Int @db.Integer
+  
+  /// Timestamp when the attachment was uploaded.
+  created_at DateTime @db.Timestamptz
+  
+  /// Soft deletion marker for compliance/moderation; nullable.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  post discussion_board_posts? @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  comment discussion_board_comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
+  uploadedBy discussion_board_users @relation(fields: [uploaded_by_id], references: [id], onDelete: Cascade)
+  
+  @@unique([file_url])
+  @@index([post_id])
+  @@index([comment_id])
+  @@index([uploaded_by_id])
+}

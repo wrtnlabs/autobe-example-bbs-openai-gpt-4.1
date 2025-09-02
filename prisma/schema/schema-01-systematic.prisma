@@ -1,4 +1,8 @@
-/// Discussion Board Category - Implements category management and administration from requirements.
+/// Represents discussion categories within the board (e.g. Politics,
+/// Economics, Society). Used for organizing posts and threads into topical
+/// groups. Supports CRUD and independent administration. Categories can have
+/// multiple tags via discussion_board_category_tag_relations. Frequently
+/// referenced by posts for content classification.
 ///
 /// @namespace Systematic
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
@@ -7,40 +11,119 @@ model discussion_board_categories {
   // COLUMNS
   //----
   /// Primary Key.
-  id String @id
+  id String @id @db.Uuid
   
-  /// Category name. Unique, used to group topics.
+  /// Category display name. Unique and user-facing (e.g. 'Politics').
   name String
   
-  /// Optional details about the category's use or scope.
+  /// Human-readable description for moderators and users.
   description String?
   
-  /// Self-reference for hierarchy. Null for top-level categories.
-  parent_id String?
-  
-  /// Is the category currently enabled for participation?
+  /// Whether this category is currently active and visible to users.
   is_active Boolean
   
-  /// Creation timestamp for this category row.
-  created_at DateTime
+  /// Manual sort order for displaying categories.
+  sort_order Int @db.Integer
   
-  /// Last updated timestamp for this row.
-  updated_at DateTime
+  /// Timestamp when category was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// Timestamp when category was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Timestamp for soft deletion; null means not deleted.
+  deleted_at DateTime? @db.Timestamptz
   
   //----
   // RELATIONS
   //----
-  discussion_board_category_moderators discussion_board_category_moderators[]
-  discussion_board_audit_logs discussion_board_audit_logs[]
-  discussion_board_system_notices discussion_board_system_notices[]
-  discussion_board_topics discussion_board_topics[]
+  discussion_board_category_tag_relations discussion_board_category_tag_relations[]
   
   @@unique([name])
   @@index([is_active])
-  @@index([created_at])
 }
 
-/// Discussion Board persistent settings table for board-level options and toggles.
+/// Vocabulary of tags that can be assigned to categories and posts. Tags
+/// enable faceted search, topic suggestions, and content filtering. Tags are
+/// managed independently; supports CRUD and list operations. Tags can be
+/// assigned to many categories (see
+/// discussion_board_category_tag_relations).
+///
+/// @namespace Systematic
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_tags {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Tag label as seen by users. Must be unique (case-insensitive).
+  label String
+  
+  /// Optional human-readable description for users/moderators.
+  description String?
+  
+  /// Whether the tag can currently be assigned.
+  is_active Boolean
+  
+  /// Timestamp when tag was registered.
+  created_at DateTime @db.Timestamptz
+  
+  /// Timestamp when tag was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Timestamp for soft deletion; null = not deleted.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  discussion_board_category_tag_relations discussion_board_category_tag_relations[]
+  
+  @@unique([label])
+  @@index([is_active])
+}
+
+/// Junction table for many-to-many relation between categories and tags.
+/// Allows a category to have multiple tags and vice versa. Only stores
+/// references; maintains referential integrity and disables duplicates.
+/// Managed internally; users assign tags to categories via admin/control
+/// panels.
+///
+/// @namespace Systematic
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_category_tag_relations {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Linked category's {@link discussion_board_categories.id}
+  discussion_board_category_id String @db.Uuid
+  
+  /// Linked tag's {@link discussion_board_tags.id}
+  discussion_board_tag_id String @db.Uuid
+  
+  /// Timestamp when this association was created.
+  created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  category discussion_board_categories @relation(fields: [discussion_board_category_id], references: [id], onDelete: Cascade, map: "discussion_board_category_tag_relations_discussion_boa_d71922fb")
+  tag discussion_board_tags @relation(fields: [discussion_board_tag_id], references: [id], onDelete: Cascade, map: "discussion_board_category_tag_relations_discussion_boa_a933acc4")
+  
+  @@index([discussion_board_tag_id], map: "discussion_board_category_tag_relations_discussion_boa_0c679702")
+  
+  @@unique([discussion_board_category_id, discussion_board_tag_id], map: "discussion_board_category_tag_relations_discussion_boa_28e1b254")
+}
+
+/// Holds global/system-wide configuration values (e.g., max post length,
+/// flags thresholds, maintenance flags). Settings are key-value, with
+/// standard metadata, allowing dynamic system reconfiguration without code
+/// deployments. Supports secure audit of changes.
 ///
 /// @namespace Systematic
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
@@ -49,62 +132,43 @@ model discussion_board_settings {
   // COLUMNS
   //----
   /// Primary Key.
-  id String @id
+  id String @id @db.Uuid
   
-  /// Setting key, e.g., 'registration_open'. Must be unique.
-  setting_key String
+  /// Unique identifier for this setting (e.g. 'max_post_length',
+  /// 'flag_threshold').
+  key String
   
-  /// Value of the setting. Text-based for flexibility.
-  setting_value String
+  /// Serialized config value for interpretation by the app (stringified JSON
+  /// for complex data if needed).
+  value String
   
-  /// Optional description of what this setting controls.
+  /// Human-intelligible explanation of this setting.
   description String?
   
-  /// Creation timestamp for this setting row.
-  created_at DateTime
+  /// Whether this setting is system-level (vs business-level).
+  is_system Boolean
   
-  /// Last updated timestamp for this row.
-  updated_at DateTime
+  /// Timestamp when setting was registered.
+  created_at DateTime @db.Timestamptz
   
-  //----
-  // RELATIONS
-  //----
-  @@unique([setting_key])
-  @@index([created_at])
-}
-
-/// Junction table mapping moderators to categories for M:N relationship per requirements. Each assignment is unique per (category_id, moderator_id).
-///
-/// @namespace Systematic
-/// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_category_moderators {
-  //----
-  // COLUMNS
-  //----
-  /// Primary Key.
-  id String @id
+  /// Timestamp when setting was last updated.
+  updated_at DateTime @db.Timestamptz
   
-  /// Reference to discussion_board_categories.id.
-  category_id String
-  
-  /// Reference to discussion_board_moderators.id (from Actors schema).
-  moderator_id String
-  
-  /// Assignment event creation timestamp.
-  created_at DateTime
+  /// Timestamp for soft deletion.
+  deleted_at DateTime? @db.Timestamptz
   
   //----
   // RELATIONS
   //----
-  discussion_board_category_moderators_category_id_fkey discussion_board_categories @relation(fields: [category_id], references: [id], onDelete: Cascade)
-  discussion_board_category_moderators_moderator_id_fkey discussion_board_moderators @relation(fields: [moderator_id], references: [id], onDelete: Cascade)
-  
-  @@unique([category_id, moderator_id], map: "discussion_board_category_moderators_category_id_moder_8a76bb8d")
-  @@index([category_id])
-  @@index([moderator_id])
+  @@unique([key])
+  @@index([is_system])
 }
 
-/// System auditing log for key events (config changes, assignments, bans, etc.). Append-only. Used for compliance and troubleshooting.
+/// Audit log for all major platform actions: configuration changes, role
+/// changes, moderation decisions, and critical system events. Each record
+/// includes metadata and references to the actor where possible (e.g., user,
+/// moderator, admin). Used for legal, compliance, and business/technical
+/// auditing.
 ///
 /// @namespace Systematic
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
@@ -113,75 +177,73 @@ model discussion_board_audit_logs {
   // COLUMNS
   //----
   /// Primary Key.
-  id String @id
+  id String @id @db.Uuid
   
-  /// ID (UUID) of actor (admin/moderator/member/user) who performed the event. Null for system actions.
-  actor_id String?
+  /// Optional reference to the acting user (visitor, user, moderator, or
+  /// admin), if applicable. Null for system actions.
+  actor_id String? @db.Uuid
   
-  /// Generic target object id affected by the action. Null if not applicable.
-  target_id String?
+  /// Role of acting entity at time of action ('visitor', 'user', 'moderator',
+  /// 'admin', or 'system').
+  actor_role String
   
-  /// Type of action performed (e.g., 'assign_moderator').
+  /// Type/category of action performed (e.g., 'config_update',
+  /// 'role_assignment', 'moderation', 'login').
   action_type String
   
-  /// Additional details or context for the event. Null if not given.
-  action_detail String?
+  /// Subject entity/object of the action. E.g., which setting, user, post,
+  /// etc. (Flexible string).
+  target_object String?
   
-  /// Event timestamp for the audit log entry.
-  created_at DateTime
+  /// Human-readable description, suited for compliance reviews.
+  description String?
+  
+  /// Action event timestamp; represents when it occurred.
+  created_at DateTime @db.Timestamptz
   
   //----
   // RELATIONS
   //----
-  discussion_board_audit_logs_actor_id_fkey discussion_board_admins? @relation(fields: [actor_id], references: [id], onDelete: Cascade)
-  discussion_board_audit_logs_target_id_fkey discussion_board_categories? @relation(fields: [target_id], references: [id], onDelete: Cascade)
+  discussion_board_action_logs discussion_board_action_logs[]
   
   @@index([actor_id])
-  @@index([target_id])
   @@index([created_at])
+  @@index([action_type(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
-/// System notices/messages for all or selected users (e.g., banners, important updates, system-wide or per-category, possibly scheduled).
+/// Detailed per-action log entries as a subsidiary to the audit log. Used
+/// for lower-level action tracing, debugging, and advanced compliance. Each
+/// action log entry references audit logs and provides granular metadata
+/// (status, payloads, errors, etc.). Not independently user-facing; supports
+/// system/compliance tracing.
 ///
 /// @namespace Systematic
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_system_notices {
+model discussion_board_action_logs {
   //----
   // COLUMNS
   //----
   /// Primary Key.
-  id String @id
+  id String @id @db.Uuid
   
-  /// Optional reference to discussion_board_categories.id. Null means global notice.
-  category_id String?
+  /// Reference to the master audit log entry {@link
+  /// discussion_board_audit_logs.id}
+  discussion_board_audit_log_id String @db.Uuid
   
-  /// Notice headline/title.
-  title String
+  /// Outcome of the action (e.g., 'success', 'fail', 'partial', or custom).
+  status String
   
-  /// Message content for the notice.
-  body String
+  /// Serialized contextual metadata (JSON). As detailed as needed for
+  /// compliance or debugging.
+  metadata String?
   
-  /// Is the notice currently displayed/shown?
-  is_active Boolean
-  
-  /// Optional start date for scheduling visible time. Null = always until end_at.
-  start_at DateTime?
-  
-  /// Optional end date for scheduling end of visibility. Null = indefinite.
-  end_at DateTime?
-  
-  /// Creation time for audit/history.
-  created_at DateTime
-  
-  /// Last updated time.
-  updated_at DateTime
+  /// Timestamp at which the action log was recorded.
+  created_at DateTime @db.Timestamptz
   
   //----
   // RELATIONS
   //----
-  discussion_board_system_notices_category_id_fkey discussion_board_categories? @relation(fields: [category_id], references: [id], onDelete: Cascade)
+  auditLog discussion_board_audit_logs @relation(fields: [discussion_board_audit_log_id], references: [id], onDelete: Cascade)
   
-  @@index([is_active])
-  @@index([category_id])
-  @@index([created_at])
+  @@index([discussion_board_audit_log_id])
 }

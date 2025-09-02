@@ -1,10 +1,13 @@
-.git/
 bin/
 dist/
 lib/
 node_modules/
-packages/api/lib/
 
-.env
+prisma/migrations
+prisma/schema/migrations
+prisma/bbs.db
+
+*.DS_Store
 package-lock.json
 pnpm-lock.yaml
+.npmrc

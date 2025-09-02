@@ -1,9 +1,6 @@
-export * as systemNotices from "./systemNotices";
-export * as topics from "./topics";
+export * as users from "./users";
+export * as threads from "./threads";
 export * as posts from "./posts";
-export * as comments from "./comments";
-export * as reports from "./reports";
+export * as flagReports from "./flagReports";
 export * as moderationActions from "./moderationActions";
-export * as contentFlags from "./contentFlags";
-export * as notifications from "./notifications";
-export * as activityLogs from "./activityLogs";
+export * as appeals from "./appeals";

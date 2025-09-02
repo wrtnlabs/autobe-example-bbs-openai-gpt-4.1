@@ -1,47 +1,136 @@
-/// Discussion Board Admins - This implements the requirement for full-platform control and high-level configuration as described in roles and permissions requirements. 
-///
-/// Admins manage the system's configuration, assign or revoke moderation privileges, configure categories, and have access to analytics, audit logs, and sensitive management features. Maintains 3NF compliance by isolating admin-specific data from other actor roles. For example, when a new admin is registered or an existing member is promoted, a single record is created here with responsible actor and relevant timestamps. 
-///
-/// Key relationships: Typically references a user identity core record (external) and logs role-specific metadata. 
-/// Special behaviors: Only records in this table may alter board configuration or perform overarching system management actions.
+/// Tracks anonymous or unauthenticated actors (visitors) for auditing,
+/// analytics, and potential future privilege escalation. Each record
+/// represents an individual visitor session or unique actor basis. Enables
+/// future anonymous posting privileges, per-visitor fraud detection, and
+/// regulatory compliance. No PII captured unless elevated. Provides soft
+/// deletion for retention management.
 ///
 /// @namespace Actors
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_admins {
+model discussion_board_visitors {
   //----
   // COLUMNS
   //----
-  /// Primary Key. Unique identifier for each admin actor instance.
-  id String @id
+  /// Primary Key.
+  id String @id @db.Uuid
   
-  /// User identifier - Implements the admin mapping aspect from requirements. The business user (system-wide or external reference, e.g., email or UID) that this admin role is assigned to. Ensures normalization by storing a single atomic identifier. For example, the platform user's UUID or SSO ID. Cannot be null.
-  user_identifier String
+  /// Opaque, non-reversible unique token identifying a visitor. Used for
+  /// session tracking and fraud detection. Never linked to PII.
+  visitor_token String
   
-  /// Grant timestamp - Represents when admin privileges were assigned. This supports audit trails, ensuring full actor traceability. For example, when a user is promoted, this is set to current timestamp.
-  granted_at DateTime
+  /// IP address used to access the service. Used only for security, fraud
+  /// detection, and audit; deleted/pseudonymized per policy.
+  ip_address String?
   
-  /// Revocation timestamp - If admin rights are rescinded, this records when. Normalization ensures separation from business data—no status flags, just event time. For example, set when admin demotion is processed. Nullable (current if null).
-  revoked_at DateTime?
+  /// User agent string or device fingerprint as received. Used for analytic
+  /// and anti-abuse measures.
+  user_agent String?
+  
+  /// Timestamp when the visitor record was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// Timestamp when the visitor record was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Timestamp when the visitor record was soft-deleted (if applicable).
+  deleted_at DateTime? @db.Timestamptz
   
   //----
   // RELATIONS
   //----
-  discussion_board_audit_logs discussion_board_audit_logs[]
-  discussion_board_moderation_actions discussion_board_moderation_actions[]
-  discussion_board_content_flags discussion_board_content_flags[]
-  
-  @@unique([user_identifier])
-  @@index([granted_at])
-  @@index([revoked_at])
+  @@unique([visitor_token])
+  @@index([created_at])
 }
 
-/// Discussion Board Moderators - Fulfills the requirement for stewardship, moderation, and enforcement powers outlined in the business requirements. 
+/// Core registered and authenticated user actors. Each represents a member
+/// with standard posting, commenting, voting, and flagging privileges. Email
+/// and username must be unique. Contains authentication and profile
+/// metadata. Subject to verification, suspension, and role escalation.
+/// Provides soft deletion for compliance.
 ///
-/// Stores data on platform-approved moderators who manage flagged content, enforce rules, and resolve user reports. Maintains 3NF: Contains only moderator-specific role/temporal status info, not general user info.
-///
-/// Usage: When an admin appoints a user as moderator, this model is updated. Example: moderator is temporarily promoted, tracked by granted/revoked timestamps.
-///
-/// Key relationships: Should reference the user identity core record (external). Special behaviors: Only these users may moderate board content. Moderator history allows for temporary appointments and role audits.
+/// @namespace Actors
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_users {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// User email address, used for login and communication. Must be unique.
+  email String
+  
+  /// Unique username chosen by the user; displayed as handle on posts/comments.
+  username String
+  
+  /// User's display name or nickname for personalized experience.
+  display_name String?
+  
+  /// Secure password hash for authentication. Raw passwords are never stored.
+  password_hash String
+  
+  /// Whether the user's email has been verified.
+  is_verified Boolean
+  
+  /// Whether the user is currently suspended from activity.
+  is_suspended Boolean
+  
+  /// If suspended, date-time until which user cannot interact. Null if not
+  /// suspended.
+  suspended_until DateTime? @db.Timestamptz
+  
+  /// Date-time of the user's last successful login.
+  last_login_at DateTime? @db.Timestamptz
+  
+  /// Timestamp when the user record was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// Timestamp when the user record was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Timestamp when the user record was soft-deleted (if applicable).
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  discussion_board_threads discussion_board_threads[]
+  discussion_board_posts discussion_board_posts[]
+  discussion_board_post_edit_histories discussion_board_post_edit_histories[]
+  discussion_board_comments discussion_board_comments[]
+  discussion_board_comment_edit_histories discussion_board_comment_edit_histories[]
+  discussion_board_attachments discussion_board_attachments[]
+  discussion_board_votes discussion_board_votes[]
+  discussion_board_poll_votes discussion_board_poll_votes[]
+  discussion_board_flag_reports discussion_board_flag_reports[]
+  discussion_board_moderation_actions discussion_board_moderation_actions[]
+  discussion_board_appeals discussion_board_appeals[]
+  discussion_board_notifications_of_recipient_user_id discussion_board_notifications[] @relation("discussion_board_notifications_of_recipient_user_id")
+  discussion_board_notifications_of_actor_user_id discussion_board_notifications[] @relation("discussion_board_notifications_of_actor_user_id")
+  discussion_board_notification_preferences discussion_board_notification_preferences?
+  discussion_board_notification_subscriptions discussion_board_notification_subscriptions[]
+  discussion_board_jwt_tokens discussion_board_jwt_tokens[]
+  discussion_board_refresh_tokens discussion_board_refresh_tokens[]
+  discussion_board_password_resets discussion_board_password_resets[]
+  discussion_board_verification_tokens discussion_board_verification_tokens[]
+  discussion_board_data_erasure_requests discussion_board_data_erasure_requests[]
+  discussion_board_privacy_dashboards discussion_board_privacy_dashboards[]
+  discussion_board_compliance_events discussion_board_compliance_events[]
+  discussion_board_export_logs discussion_board_export_logs[]
+  
+  @@unique([email])
+  @@unique([username])
+  @@index([created_at])
+  @@index([is_verified, is_suspended])
+  @@index([display_name(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// Table of actors with assigned moderator status. Moderators are registered
+/// users with elevated permissions for content and user management.
+/// Assignment/removal is managed by admins; assignment events are logged
+/// externally. Includes privileged status and active window. Independent
+/// management supports auditing of promotion/demotion and moderator-specific
+/// attributes. Provides soft deletion for compliance.
 ///
 /// @namespace Actors
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
@@ -49,150 +138,90 @@ model discussion_board_moderators {
   //----
   // COLUMNS
   //----
-  /// Primary Key. Unique identifier for the moderator role assignment.
-  id String @id
+  /// Primary Key.
+  id String @id @db.Uuid
   
-  /// User identifier - Implements role actor mapping. Identifies which user has moderator privilege. Ensures a flexible mapping to central user/auth system. Example: contains user UUID. Non-nullable.
-  user_identifier String
+  /// Associated user actor's id promoted to moderator role. Duplicates user
+  /// data for audit separation and role-specific attributes.
+  user_id String @db.Uuid
   
-  /// Role grant timestamp - Implements time-based access control for moderators. Defines when privilege started. Ensures normalized audit trail: e.g., moderating user granted the role on this date.
-  granted_at DateTime
+  /// Timestamp when moderator role was assigned.
+  assigned_at DateTime @db.Timestamptz
   
-  /// Role revocation timestamp - Supports time-boxed moderator roles and historical traceability for audit. Null if moderator powers still active. Example: removed when privilege is lost or user is demoted. Nullable.
-  revoked_at DateTime?
+  /// Timestamp moderator privileges were revoked, if ever. Null if currently
+  /// active.
+  revoked_at DateTime? @db.Timestamptz
+  
+  /// Whether the moderator is currently active (not revoked or suspended).
+  is_active Boolean
+  
+  /// Moderator-specific suspension window, if applicable.
+  suspended_until DateTime? @db.Timestamptz
+  
+  /// Timestamp when the moderator record was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// Timestamp when the moderator record was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Timestamp when the moderator record was soft-deleted (if applicable).
+  deleted_at DateTime? @db.Timestamptz
   
   //----
   // RELATIONS
   //----
-  discussion_board_category_moderators discussion_board_category_moderators[]
   discussion_board_moderation_actions discussion_board_moderation_actions[]
-  discussion_board_content_flags discussion_board_content_flags[]
   
-  @@unique([user_identifier])
-  @@index([granted_at])
-  @@index([revoked_at])
-}
-
-/// Discussion Board Members - This captures all active registered users per system requirements. Implements business requirement for authenticated users with member privileges who can post, comment, report, and otherwise participate fully on the board.
-///
-/// Is strictly 3NF: contains only what is unique/relevant to the member role, not detailed user data or computed features. For example, a new member record is created upon registration or promotion from guest status.
-///
-/// Key relationships: May reference external user directory/identity tables.
-/// Special behaviors: Additional flags/elevation handled via role-specific models (admin, moderator, etc.). Only users listed here may create threads or comments.
-///
-/// @namespace Actors
-/// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_members {
-  //----
-  // COLUMNS
-  //----
-  /// Primary Key. Unique identifier for registered member record.
-  id String @id
-  
-  /// User identifier - Implements member-account mapping to platform-wide or external user. Ensures atomic mapping to user identity. Example: could be user UUID, email, SSO subject. Non-nullable.
-  user_identifier String
-  
-  /// Join timestamp - When the member registered on the board. Enables user analytics/audit logging. For example, set to creation date for analytics use.
-  joined_at DateTime
-  
-  /// Suspension timestamp - If the member is barred from participation, logs when suspension took effect. Normalized: retains only the timestamp, not pre-calculated status. Null if active.
-  suspended_at DateTime?
-  
-  //----
-  // RELATIONS
-  //----
-  discussion_board_topics discussion_board_topics[]
-  discussion_board_threads discussion_board_threads[]
-  discussion_board_posts discussion_board_posts[]
-  discussion_board_post_versions discussion_board_post_versions[]
-  discussion_board_post_attachments discussion_board_post_attachments[]
-  discussion_board_comments discussion_board_comments[]
-  discussion_board_comment_versions discussion_board_comment_versions[]
-  discussion_board_comment_attachments discussion_board_comment_attachments[]
-  discussion_board_reports discussion_board_reports[]
-  discussion_board_subscriptions discussion_board_subscriptions[]
-  discussion_board_notifications discussion_board_notifications[]
-  discussion_board_activity_logs discussion_board_activity_logs[]
-  
-  @@unique([user_identifier])
-  @@index([joined_at])
-  @@index([suspended_at])
-}
-
-/// Discussion Board Guests - Implements the requirement for unauthenticated users who may browse (but not act) on public content, as per business requirements. 
-///
-/// Stores session-level tracking for guests (cookies, tokens, or temporary IDs) to distinguish unique visitors, support analytics, or inform onboarding flows (e.g., one-time announcements).
-///
-/// 3NF: No computed access flags, just raw identity and time stamps. Example: new guest detected (session/cookie assignment) creates a record here for behavior tracking until registration.
-///
-/// Key relationships: Standalone design, with possible linkage to analytics/log tables.
-/// Special behaviors: Only guests here are treated as unique browsers for basic auditing—no personal data unless promoted to member.
-///
-/// @namespace Actors
-/// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_guests {
-  //----
-  // COLUMNS
-  //----
-  /// Primary Key. Unique ID for the tracked guest session.
-  id String @id
-  
-  /// Session identifier - Implements tracking of guest/visitor session via cookie/token/UUID. Ensures atomicity and normalizes identification for auditing/analytics. For example, a one-time session ID. Required for all guest sessions.
-  session_identifier String
-  
-  /// First seen timestamp - When this guest was first detected by the system. For session analysis/onboarding optimization. Non-nullable.
-  first_seen_at DateTime
-  
-  /// Last seen timestamp - Last activity by this guest before exit or registration. Helps track unique visitors and session duration; normalized storage. Non-nullable.
-  last_seen_at DateTime
-  
-  //----
-  // RELATIONS
-  //----
-  @@unique([session_identifier])
-  @@index([first_seen_at])
-  @@index([last_seen_at])
-}
-
-/// Discussion Board User Sessions - Fulfills the cross-role requirement for persistent login/session tracking to support authentication, session management, and traceability, as required by the technical/API documentation.
-///
-/// Manages every authenticated or tracked session (admin, moderator, member, or guest), enabling token-based authentication, session expiry, user-actor analytics, and auto-logout on privilege changes. Maintains 3NF: holds only direct session facts, not computed fields or summaries. Example: a user logs in, a session is created here with user and session info, plus expiry fields for security/audit logging.
-///
-/// Key relationships: Should reference user identifier (admin, moderator, member) or guest session. No other foreign keys—designed for compatibility with all actor types.
-///
-/// Special behaviors: Only these records define active sessions. Session termination/expiry and forced logout for security is enforced by updating or nulling the termination timestamp. Role/applicable features determined externally (not here).
-///
-/// @namespace Actors
-/// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_user_sessions {
-  //----
-  // COLUMNS
-  //----
-  /// Primary Key. Unique identifier for the user/guest session.
-  id String @id
-  
-  /// Actor type - Group discriminator (e.g., 'admin', 'moderator', 'member', 'guest'). Implements cross-role session context, as required by session management documentation. Ensures normalization by direct storage; no duplication of other user data. Example: 'moderator'. Non-nullable.
-  actor_type String
-  
-  /// Actor identifier - Implements session-to-user/guest linkage (contains user_identifier or session_identifier as per actor_type). Normalizes reference to actor record, following atomic data principles. Non-nullable.
-  actor_identifier String
-  
-  /// Session token - Stores opaque session token (e.g., JWT, UUID, cookie) for authentication. Supports per-session tracking for forced logouts, API/request scoping. Normalization: only token string, never computed status. Example: a unique token generated at login. Non-nullable.
-  session_token String
-  
-  /// Session creation timestamp - For session timeline, auditing, and active user tracking. Example: when login completes or guest arrives. Non-nullable.
-  created_at DateTime
-  
-  /// Session expiry timestamp - When session is set to expire; enables auto-logout, security enforcement, and short/long session analytics. Non-nullable.
-  expires_at DateTime
-  
-  /// Termination timestamp (logout/kicked/timeout) - Supports hard logouts, token revocation, audit trails for suspicious/revoked sessions. Normalized: timestamp only, nullable if not terminated yet. For example, updated on manual logout, role loss, or session timeout. Nullable.
-  terminated_at DateTime?
-  
-  //----
-  // RELATIONS
-  //----
-  @@unique([session_token])
+  @@unique([user_id])
+  @@index([is_active])
   @@index([created_at])
-  @@index([actor_type, actor_identifier])
+}
+
+/// Platform/system administrators with the highest permissions. This table
+/// tracks all admin actors, with status, assignment, suspension, and audit
+/// fields. Admin management is independent for audit/control.
+/// Assignment/removal is always by root/admin. No calculated fields.
+/// Provides soft deletion for regulatory compliance.
+///
+/// @namespace Actors
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_admins {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Associated user actor's id with admin role. Allows admin-specific
+  /// privileges, assignment/revocation audit, and separation of admin status.
+  user_id String @db.Uuid
+  
+  /// Timestamp when admin status/role was granted.
+  assigned_at DateTime @db.Timestamptz
+  
+  /// Timestamp when admin privileges were revoked, if ever. Null if currently
+  /// active.
+  revoked_at DateTime? @db.Timestamptz
+  
+  /// Whether the admin is currently active (not revoked or suspended).
+  is_active Boolean
+  
+  /// Admin-specific suspension window, if applicable.
+  suspended_until DateTime? @db.Timestamptz
+  
+  /// Timestamp when the admin record was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// Timestamp when the admin record was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Timestamp when the admin record was soft-deleted (if applicable).
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  @@unique([user_id])
+  @@index([is_active])
+  @@index([created_at])
 }

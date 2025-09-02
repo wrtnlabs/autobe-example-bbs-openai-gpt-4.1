@@ -1,56 +1,77 @@
-/// Reports of inappropriate or abusive content - Tracks user reports of posts or comments that may violate guidelines. Maintains strict 3NF by separating each report as an atomic record. Polymorphic reference resolved by two nullable foreign keys: one for post and one for comment.
+/// Contains all user and system-generated content flag reports, representing
+/// instance of objection or report on posts or comments for moderator queue.
+/// Supports independent flag actions and cross-content search for moderation
+/// workflows. Related entities: moderation actions and appeals. Stance:
+/// "primary" because each report may be managed, investigated, or triaged
+/// independently, regardless of content parent.
 ///
 /// @namespace Moderation
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_reports {
+model discussion_board_flag_reports {
   //----
   // COLUMNS
   //----
-  /// Primary Key. Unique identifier for each report instance.
-  id String @id
+  /// Primary Key.
+  id String @id @db.Uuid
   
-  /// Reporter user's {@link discussion_board_members.id}. Identifies who made the report. Ensures normalized reference to member entity.
-  reporter_id String
+  /// Reporting user's {@link discussion_board_users.id}. References the user
+  /// who flagged content.
+  reporter_id String @db.Uuid
   
-  /// The ID of the discussion_board_posts being reported. Null unless content_type is 'post'.
-  reported_post_id String?
+  /// Flagged post's {@link discussion_board_posts.id}. Nullable if the report
+  /// is on a comment.
+  post_id String? @db.Uuid
   
-  /// The ID of the discussion_board_comments being reported. Null unless content_type is 'comment'.
-  reported_comment_id String?
+  /// Flagged comment's {@link discussion_board_comments.id}. Nullable if the
+  /// report refers to a post.
+  comment_id String? @db.Uuid
   
-  /// Indicates what type of content is being reported, e.g., 'post' or 'comment'.
-  content_type String
-  
-  /// Explanation/reason for reporting content. Implements the user-provided reason requirement.
+  /// User-provided or system reason (category) for flagging the content, e.g.
+  /// 'abuse', 'spam', 'misinformation'.
   reason String
   
-  /// Current moderation status of the report (e.g., 'pending', 'reviewed', 'resolved').
+  /// Optional extended textual justification for the report.
+  details String?
+  
+  /// Current review status for the report ('pending', 'triaged', 'dismissed',
+  /// 'accepted', 'escalated').
   status String
   
-  /// Timestamp when report was created.
-  created_at DateTime
+  /// The timestamp when the report was reviewed by a moderator; null if not
+  /// yet reviewed.
+  reviewed_at DateTime? @db.Timestamptz
   
-  /// Timestamp when report was resolved (null if unresolved).
-  resolved_at DateTime?
+  /// Time when the flag report was submitted.
+  created_at DateTime @db.Timestamptz
+  
+  /// Last time the report record was updated (e.g. status changes, triage).
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft-delete timestamp. Null if active.
+  deleted_at DateTime? @db.Timestamptz
   
   //----
   // RELATIONS
   //----
-  fk_reporter_members discussion_board_members @relation(fields: [reporter_id], references: [id], onDelete: Cascade)
-  fk_reported_post_content discussion_board_posts? @relation(fields: [reported_post_id], references: [id], onDelete: Cascade)
-  fk_reported_comment_content discussion_board_comments? @relation(fields: [reported_comment_id], references: [id], onDelete: Cascade)
+  reporter discussion_board_users @relation(fields: [reporter_id], references: [id], onDelete: Cascade)
+  post discussion_board_posts? @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  comment discussion_board_comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
   
-  discussion_board_moderation_actions discussion_board_moderation_actions[]
+  discussion_board_appeals discussion_board_appeals[]
   
-  @@index([reported_post_id])
-  @@index([reported_comment_id])
-  
-  @@unique([reporter_id, reported_post_id, reported_comment_id], map: "discussion_board_reports_reporter_id_reported_post_id__ebf89e91")
+  @@unique([reporter_id, post_id, comment_id], map: "discussion_board_flag_reports_reporter_id_post_id_comm_7d29473d")
   @@index([status])
   @@index([created_at])
+  @@index([post_id])
+  @@index([comment_id])
+  @@index([details(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
-/// Actions taken by moderators or admins regarding content moderation - Each moderation action references either a moderator or an admin (never both); action may target a post or a comment, resolved via separate nullable foreign keys.
+/// Represents all actionable decisions performed by human moderators or
+/// automated systems, including those on posts, comments, users, or IPs.
+/// Stores the action type, moderator reference, context, reason, and effect.
+/// Enables independent audit across parent contexts and supports historical
+/// review.
 ///
 /// @namespace Moderation
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
@@ -58,101 +79,237 @@ model discussion_board_moderation_actions {
   //----
   // COLUMNS
   //----
-  /// Primary Key. Unique identifier for each moderation action event.
-  id String @id
+  /// Primary Key.
+  id String @id @db.Uuid
   
-  /// Moderator user's {@link discussion_board_moderators.id}. Null unless a moderator acted.
-  actor_moderator_id String?
+  /// Responsible moderator's {@link discussion_board_moderators.id}.
+  moderator_id String @db.Uuid
   
-  /// Admin user's {@link discussion_board_admins.id}. Null unless an admin acted.
-  actor_admin_id String?
+  /// Affected user's {@link discussion_board_users.id}. Null unless moderation
+  /// action targets a user directly (e.g., warning, suspension).
+  user_id String? @db.Uuid
   
-  /// The ID of the discussion_board_posts being moderated. Null unless the action targets a post.
-  post_id String?
+  /// Moderated post's {@link discussion_board_posts.id}. Null unless this
+  /// action is for a post.
+  post_id String? @db.Uuid
   
-  /// The ID of the discussion_board_comments being moderated. Null unless the action targets a comment.
-  comment_id String?
+  /// Moderated comment's {@link discussion_board_comments.id}. Null unless
+  /// this action is for a comment.
+  comment_id String? @db.Uuid
   
-  /// If action relates directly to a report, this field links to the discussion_board_reports entry. Nullable for stand-alone moderation.
-  report_id String?
-  
-  /// Describes the moderation action performed (e.g., 'delete', 'edit', 'warn', 'ban').
+  /// Enumeration: kind of moderation ('warn', 'mute', 'remove', 'edit',
+  /// 'restrict', 'restore', 'escalate').
   action_type String
   
-  /// Additional details (eg, reason, notes, evidence).
-  action_details String?
+  /// Human- or system-written reason for moderator action, for compliance
+  /// traceability.
+  action_reason String
   
-  /// Timestamp when moderation action was performed.
-  created_at DateTime
+  /// Long-form description or notes about the moderation action.
+  details String?
+  
+  /// When the moderation action took effect.
+  effective_from DateTime @db.Timestamptz
+  
+  /// When the moderation action concludes (for temporary
+  /// restrictions/warnings), null if not time-bound.
+  effective_until DateTime? @db.Timestamptz
+  
+  /// Timestamp when the moderation action was taken.
+  created_at DateTime @db.Timestamptz
+  
+  /// Timestamp of last update to the moderation action record.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft-delete timestamp; null if active.
+  deleted_at DateTime? @db.Timestamptz
   
   //----
   // RELATIONS
   //----
-  fk_actor_moderator discussion_board_moderators? @relation(fields: [actor_moderator_id], references: [id], onDelete: Cascade)
-  fk_actor_admin discussion_board_admins? @relation(fields: [actor_admin_id], references: [id], onDelete: Cascade)
-  fk_moderated_post discussion_board_posts? @relation(fields: [post_id], references: [id], onDelete: Cascade)
-  fk_moderated_comment discussion_board_comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
-  fk_action_report discussion_board_reports? @relation(fields: [report_id], references: [id], onDelete: Cascade)
+  moderator discussion_board_moderators @relation(fields: [moderator_id], references: [id], onDelete: Cascade)
+  user discussion_board_users? @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  post discussion_board_posts? @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  comment discussion_board_comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
   
-  @@index([actor_admin_id])
-  @@index([report_id])
+  discussion_board_moderation_audit_logs discussion_board_moderation_audit_logs[]
+  discussion_board_appeals discussion_board_appeals[]
+  discussion_board_escalation_logs discussion_board_escalation_logs[]
   
-  @@index([actor_moderator_id, actor_admin_id, created_at], map: "discussion_board_moderation_actions_actor_moderator_id_e7b8d0e8")
+  @@unique([moderator_id, user_id, post_id, comment_id, action_type, created_at], map: "discussion_board_moderation_actions_moderator_id_user__0c91b139")
+  @@index([action_type])
+  @@index([created_at])
+  @@index([user_id])
   @@index([post_id])
   @@index([comment_id])
+  @@index([details(ops: raw("gin_trgm_ops"))], type: Gin)
 }
 
-/// Flags attached to posts or comments for moderation - Polymorphic reference is two separate nullable FKs (post and comment). Flagged by a moderator, admin, or system; these are represented by two nullable FKs for human actors.
+/// Historical record (append-only snapshot) of all moderation, triage, and
+/// review actions for compliance, reporting, and forensic analysis. Each
+/// record is timestamped and stores the full state for audit trail
+/// integrity. Rarely directly manipulated—serves audit and investigation.
 ///
 /// @namespace Moderation
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_content_flags {
+model discussion_board_moderation_audit_logs {
   //----
   // COLUMNS
   //----
-  /// Primary Key. Unique identifier for each content flag instance.
-  id String @id
+  /// Primary Key.
+  id String @id @db.Uuid
   
-  /// ID of post being flagged. Nullable; set if flag is on a post.
-  post_id String?
+  /// Related moderation action's {@link
+  /// discussion_board_moderation_actions.id}.
+  moderation_action_id String @db.Uuid
   
-  /// ID of comment being flagged. Nullable; set if flag is on a comment.
-  comment_id String?
+  /// Person (or system) responsible for the action, references moderator,
+  /// admin, or automated user. Redundant for historical snapshot integrity.
+  actor_id String @db.Uuid
   
-  /// Moderator user's {@link discussion_board_moderators.id}. Nullable.
-  flagged_by_moderator_id String?
+  /// Kind of audit event ('action_taken', 'escalated', 'reverted',
+  /// 'appeal_handled', 'policy_update').
+  audit_type String
   
-  /// Admin user's {@link discussion_board_admins.id}. Nullable.
-  flagged_by_admin_id String?
+  /// Full JSON snapshot of the moderation or flag report state after this
+  /// event.
+  state_json String
   
-  /// Nature of flag (e.g., 'spam', 'abuse', 'automation', 'duplicate').
-  flag_type String
+  /// Narrative (English) describing the event for future compliance/audit
+  /// review.
+  description String?
   
-  /// Source/origin of flag, e.g. 'manual', 'automation', 'external'.
-  flag_source String
-  
-  /// Additional notes about why flag was set (free form, optional).
-  flag_details String?
-  
-  /// Timestamp when flag was created. Implements audit trace per EARS specs.
-  created_at DateTime
-  
-  /// Timestamp when flag was cleared/resolved (null if still active).
-  cleared_at DateTime?
+  /// Timestamp when the audit log was created (event occurred).
+  created_at DateTime @db.Timestamptz
   
   //----
   // RELATIONS
   //----
-  fk_flagged_post discussion_board_posts? @relation(fields: [post_id], references: [id], onDelete: Cascade)
-  fk_flagged_comment discussion_board_comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
-  fk_flagged_by_moderator discussion_board_moderators? @relation(fields: [flagged_by_moderator_id], references: [id], onDelete: Cascade)
-  fk_flagged_by_admin discussion_board_admins? @relation(fields: [flagged_by_admin_id], references: [id], onDelete: Cascade)
+  moderationAction discussion_board_moderation_actions @relation(fields: [moderation_action_id], references: [id], onDelete: Cascade, map: "discussion_board_moderation_audit_logs_moderation_acti_44fc43b0")
   
-  @@index([comment_id])
-  @@index([flagged_by_moderator_id])
-  @@index([flagged_by_admin_id])
-  
-  @@unique([post_id, comment_id, flag_type, flag_source], map: "discussion_board_content_flags_post_id_comment_id_flag_18d1d7d2")
+  @@unique([moderation_action_id, created_at], map: "discussion_board_moderation_audit_logs_moderation_acti_bdb291ca")
+  @@index([audit_type])
   @@index([created_at])
-  @@index([flag_type])
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// Represents end-user or affected entity appeals against
+/// moderation/flag/report actions. Enables users to formally request review,
+/// reversal, or clarification of specific moderation events. Managed as
+/// independent first-class entities and supports multiple appeals per
+/// incident or actor. Stance: 'primary' due to independent API endpoints and
+/// review processes.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_appeals {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Appealing user's {@link discussion_board_users.id}. May reference a
+  /// moderator or admin in rare cases.
+  appellant_id String @db.Uuid
+  
+  /// Related moderation action's {@link
+  /// discussion_board_moderation_actions.id}. Null if appeal relates to a flag
+  /// report rather than a prior action.
+  moderation_action_id String? @db.Uuid
+  
+  /// Related flag report's {@link discussion_board_flag_reports.id}. Null
+  /// unless appeal targets a moderation action on a flag, not a content
+  /// moderation event.
+  flag_report_id String? @db.Uuid
+  
+  /// User-provided narrative and justification for the appeal.
+  appeal_reason String
+  
+  /// Appeal lifecycle status: ('pending', 'reviewed', 'resolved', 'denied',
+  /// 'escalated').
+  status String
+  
+  /// Moderator/admin comment or justification for granting/denying the appeal,
+  /// if applicable.
+  resolution_comment String?
+  
+  /// Timestamp of final resolution. Null if still active or under review.
+  resolved_at DateTime? @db.Timestamptz
+  
+  /// Timestamp when the appeal was initially filed.
+  created_at DateTime @db.Timestamptz
+  
+  /// Last updated timestamp for the appeal.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft-delete timestamp. Null if active.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  appellant discussion_board_users @relation(fields: [appellant_id], references: [id], onDelete: Cascade)
+  moderationAction discussion_board_moderation_actions? @relation(fields: [moderation_action_id], references: [id], onDelete: Cascade)
+  flagReport discussion_board_flag_reports? @relation(fields: [flag_report_id], references: [id], onDelete: Cascade)
+  
+  discussion_board_escalation_logs discussion_board_escalation_logs[]
+  
+  @@index([moderation_action_id])
+  @@index([flag_report_id])
+  
+  @@unique([appellant_id, moderation_action_id, flag_report_id], map: "discussion_board_appeals_appellant_id_moderation_actio_301b4c57")
+  @@index([status])
+  @@index([created_at])
+  @@index([appeal_reason(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([resolution_comment(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// Workflow subsidiary: records detailed logs of escalation events,
+/// including chain-of-command handover, reason, target, and final outcomes.
+/// Always tied to foundational moderation or appeal entities—never as
+/// independent records. Supports internal reporting, audit, and escalated
+/// workflow trace. Managed through parent entities only.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_escalation_logs {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Reference to the related {@link discussion_board_appeals.id}.
+  appeal_id String @db.Uuid
+  
+  /// Reference to related {@link discussion_board_moderation_actions.id} —
+  /// escalation of a specific moderation action.
+  moderation_action_id String? @db.Uuid
+  
+  /// Level/stage (e.g., 'soft_review', 'team_review', 'legal_review',
+  /// 'admin_review').
+  escalation_level String
+  
+  /// Short name ('escalated', 'delegated', 'finalized', 'withdrawn').
+  event String
+  
+  /// Human-readable details for internal reporting.
+  description String?
+  
+  /// Timestamp of escalation log record.
+  created_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  appeal discussion_board_appeals @relation(fields: [appeal_id], references: [id], onDelete: Cascade)
+  moderationAction discussion_board_moderation_actions? @relation(fields: [moderation_action_id], references: [id], onDelete: Cascade)
+  
+  @@index([moderation_action_id])
+  
+  @@unique([appeal_id, moderation_action_id, escalation_level, created_at], map: "discussion_board_escalation_logs_appeal_id_moderation__a0bc94c7")
+  @@index([event])
+  @@index([created_at])
+  @@index([description(ops: raw("gin_trgm_ops"))], type: Gin)
 }

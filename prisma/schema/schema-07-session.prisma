@@ -1,0 +1,210 @@
+/// Stores all active JWT access tokens for authenticated sessions. Each
+/// token links to a user and device/session metadata, and includes issued,
+/// expiration, and revocation timestamps for full audit traceability.
+/// Enables support for single-session, multi-device, and session revocation.
+/// References {@link discussion_board_users.id}. No authentication logic
+/// present here.
+///
+/// @namespace Session
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_jwt_tokens {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Authenticated user's {@link discussion_board_users.id} to whom the token
+  /// was issued.
+  discussion_board_user_id String @db.Uuid
+  
+  /// JWT access token string (opaque, signed/encoded).
+  token String
+  
+  /// Datetime when token was generated, for audit trace and session tracking.
+  issued_at DateTime @db.Timestamptz
+  
+  /// Datetime when this token should expire and become invalid.
+  expires_at DateTime @db.Timestamptz
+  
+  /// Datetime when this session/token was revoked (null if still valid).
+  revoked_at DateTime? @db.Timestamptz
+  
+  /// Optional device/session metadata (browser, OS, IP, or user agent as
+  /// string).
+  device_info String?
+  
+  /// Datetime when this record was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// Datetime when this record was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft-delete timestamp for audit compliance. Null if active.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  user discussion_board_users @relation(fields: [discussion_board_user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([token])
+  @@index([discussion_board_user_id])
+  @@index([issued_at])
+  @@index([expires_at])
+}
+
+/// Tracks refresh tokens used for obtaining new access tokens in session
+/// management. Each token is linked to a user and supports revocation or
+/// expiry for device-specific logout flows. Only one active refresh token
+/// per device/session per user per audit and compliance rule. References
+/// {@link discussion_board_users.id}.
+///
+/// @namespace Session
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_refresh_tokens {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Token owner's {@link discussion_board_users.id}.
+  discussion_board_user_id String @db.Uuid
+  
+  /// Opaque token string for session refresh (secure random, not JWT).
+  refresh_token String
+  
+  /// Datetime when refresh token was created for auditing lifecycle.
+  issued_at DateTime @db.Timestamptz
+  
+  /// Datetime this refresh token expires.
+  expires_at DateTime @db.Timestamptz
+  
+  /// Datetime when refresh token was revoked (manual or on logout). Null if
+  /// active.
+  revoked_at DateTime? @db.Timestamptz
+  
+  /// Optional device/session metadata for context or audit (device/browser/IP
+  /// info).
+  device_info String?
+  
+  /// Datetime when this record was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// Datetime when this record was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft-delete timestamp. Null if active.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  user discussion_board_users @relation(fields: [discussion_board_user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([refresh_token])
+  @@index([discussion_board_user_id])
+  @@index([issued_at])
+  @@index([expires_at])
+}
+
+/// Supports password reset flows by tracking all issued reset tokens, their
+/// status, and their relationship to a user. Allows only single-use,
+/// time-limited tokens, enforced via expiry and one-time use flags. Each row
+/// is fully auditable for compliance. Links to {@link
+/// discussion_board_users.id}.
+///
+/// @namespace Session
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_password_resets {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Owner user requesting password reset; references {@link
+  /// discussion_board_users.id}.
+  discussion_board_user_id String @db.Uuid
+  
+  /// Single-use password reset token string (secure, unique, non-repeating).
+  reset_token String
+  
+  /// Datetime when reset link or token expires and may not be reused.
+  expires_at DateTime @db.Timestamptz
+  
+  /// Datetime when this token was actually used (null if not yet used).
+  used_at DateTime? @db.Timestamptz
+  
+  /// Datetime when this record was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// Datetime when this record was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft-delete timestamp for audit compliance. Null if active.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  user discussion_board_users @relation(fields: [discussion_board_user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([reset_token])
+  @@index([discussion_board_user_id])
+  @@index([expires_at])
+}
+
+/// Stores and tracks verification codes/tokens for email or other
+/// out-of-band verification events during registration and sensitive
+/// operations. Each token may be single-use or multi-purpose (e.g., sign-up
+/// email, MFA, email update), linked to a user for audit and reissuance
+/// tracking. Each has timing and usage audit state. Tied to {@link
+/// discussion_board_users.id}.
+///
+/// @namespace Session
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_verification_tokens {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Reference to the user for whom this verification event is tracked. {@link
+  /// discussion_board_users.id}.
+  discussion_board_user_id String @db.Uuid
+  
+  /// Token string/code sent for registration/email verification/MFA.
+  verification_token String
+  
+  /// Purpose of this token (e.g. 'email_verification', 'password_reset',
+  /// 'mfa').
+  purpose String
+  
+  /// Datetime when verification event expires.
+  expires_at DateTime @db.Timestamptz
+  
+  /// Datetime when code was used for verification, else null if unused.
+  used_at DateTime? @db.Timestamptz
+  
+  /// Datetime when this record was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// Datetime when this record was last updated.
+  updated_at DateTime @db.Timestamptz
+  
+  /// Soft-delete timestamp for audit. Null if not deleted.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  user discussion_board_users @relation(fields: [discussion_board_user_id], references: [id], onDelete: Cascade, map: "discussion_board_verification_tokens_discussion_board__93fbe162")
+  
+  @@unique([verification_token])
+  @@index([discussion_board_user_id], map: "discussion_board_verification_tokens_discussion_board__304aedb2")
+  @@index([expires_at])
+  @@index([purpose])
+}

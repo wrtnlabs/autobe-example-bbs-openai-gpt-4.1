@@ -1,59 +1,12 @@
-/// Discussion board subscription management - This implements the requirements for user subscriptions to topics or threads, as stated in 'Notification and Subscription' and 'Workflow Summary' in the requirements document. 
-///
-/// Business purpose: Allows users (members) to subscribe to specific topics or threads to receive notifications about new posts, comments, or updates. This facilitates personalized engagement and information delivery. 
-///
-/// Normalization: This table is fully normalized (3NF), with references only to users and content being tracked (topics/threads). All event/counter data is derived elsewhere and NOT stored here. For example, a member subscribes to a thread and chooses to receive email notifications for new comments. 
-///
-/// Key relationships: Connects to user/member accounts and references content entities like topics or threads through polymorphic association. 
-/// Special behaviors: One user may have multiple subscriptions (to different threads or topics); uniqueness is typically enforced per (user, target_type, target_id) tuple.
-///
-/// @namespace Notifications
-/// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_subscriptions {
-  //----
-  // COLUMNS
-  //----
-  /// Primary Key. Unique identifier for each subscription record.
-  id String @id
-  
-  /// Subscribed user's {@link discussion_board_members.id} (or similar actor/user id from the actors module) - Links the subscription to the specific member who will receive notifications.
-  subscriber_id String
-  
-  /// Type of subscribed entity (e.g., 'topic', 'thread'). Implements the polymorphic requirement allowing users to subscribe to both topics and threads as described in features. Ensures normalization by not duplicating data between entity types. For example, value may be 'topic' or 'thread'.
-  target_type String
-  
-  /// Identifier for the target entity the subscription belongs to (may refer to either a topic or thread depending on target_type). This allows polymorphic associations without denormalization. For example, the UUID of the thread or topic being followed.
-  target_id String
-  
-  /// Timestamp when the subscription was created. Implements audit and tracking requirement. Ensures atomicity of event recording. For example, when the user first clicks 'subscribe' on a discussion.
-  subscribed_at DateTime
-  
-  /// Preferred notification delivery method for this subscription (e.g., 'email', 'in-app'). Implements flexible business logic for user notification preferences. Complies with normalization as all methods remain atomic here. For example, a member may choose 'email' for some threads but 'in-app' for others.
-  notification_method String
-  
-  /// Whether the subscription is currently active. Implements toggling or pause of notifications per subscription, as required for user experience. Ensures no derived or pre-calculated values. For example, users may mute certain subscriptions by setting this to false.
-  is_active Boolean
-  
-  //----
-  // RELATIONS
-  //----
-  fk_discussion_board_subscriptions_subscriber discussion_board_members @relation(fields: [subscriber_id], references: [id], onDelete: Cascade)
-  
-  discussion_board_notifications discussion_board_notifications[]
-  
-  @@unique([subscriber_id, target_type, target_id], map: "discussion_board_subscriptions_subscriber_id_target_ty_ebee29a4")
-  @@index([target_type, target_id])
-  @@index([subscribed_at])
-}
-
-/// Notification delivery and tracking for the discussion board - Implements requirements from the 'Notification and Subscription' and related workflow/acceptance criteria, supporting delivery and audit of in-app and external notifications.
-///
-/// Business purpose: Tracks each notification event sent to a user, related to activity on a subscribed topic/thread or board event. Enables notification rendering, read/unread status, preference handling, and delivery outcomes. 
-///
-/// Normalization: Table is normalized (3NF) by separating notification content, recipient, and status; no denormalized aggregates present. For example, a member gets notified of a reply to a subscribed thread, and the read status is managed here. 
-///
-/// Key Relationships: References a recipient member, may reference the subscription (optional), and stores only atomic notification delivery details. 
-/// Special behaviors: Read/unread logic, delivery status, and failure reasons may be updated; past notification events are retained for audit.
+/// Notification delivery instances: Each record represents a discrete
+/// notification, either user-facing or system-triggered, intended for a
+/// specific recipient. Supports associations with sending actor, linked
+/// post/comment (if reference exists), notification type, status
+/// (unread/read/delivered), and failure/audit fields. User can independently
+/// mark as read/archived. Related to {@link discussion_board_users},
+/// potentially to posts/comments via foreign keys. Business logic
+/// distinguishes among notification types (reply, mention, moderator action,
+/// system alert, etc.).
 ///
 /// @namespace Notifications
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
@@ -61,48 +14,177 @@ model discussion_board_notifications {
   //----
   // COLUMNS
   //----
-  /// Primary Key. Unique identifier for each notification.
-  id String @id
+  /// Primary Key.
+  id String @id @db.Uuid
   
-  /// Recipient user's {@link discussion_board_members.id} (or similar actor/user id from actors module). Links the notification event to a specific member account.
-  recipient_id String
+  /// Target recipient's {@link discussion_board_users.id}. User who receives
+  /// the notification.
+  recipient_user_id String @db.Uuid
   
-  /// (Optional) Reference to the {@link discussion_board_subscriptions.id} for the relevant subscription (if the notification was triggered by a subscription). Null when notification arises independently of a user's explicit subscription.
-  subscription_id String?
+  /// Optional actor that generated the notification. References {@link
+  /// discussion_board_users.id}; null for system events.
+  actor_user_id String? @db.Uuid
   
-  /// Type/category of notification (e.g., 'new_post', 'reply', 'mention', 'system'). Implements requirement for multi-purpose notifications in features/workflow. Ensures atomicity and supports rendering. For example, 'reply' for a reply to a user's comment.
-  notification_type String
+  /// Linked post, if notification relates to a discussion post. References
+  /// {@link discussion_board_posts.id}. Nullable.
+  post_id String? @db.Uuid
   
-  /// Type of the entity the notification is about (e.g., 'topic', 'thread', 'post', etc.). Implements generalization of event sources in notifications. Ensures normalized mapping for polymorphic references. For example, value may be 'thread' or 'topic'.
-  target_type String
+  /// Linked comment, if notification relates to a post comment. References
+  /// {@link discussion_board_comments.id}. Nullable.
+  comment_id String? @db.Uuid
   
-  /// Identifier of the target entity (thread, topic, post, etc.) that this notification concerns. Implements polymorphic association as per requirements analysis. Ensures each notification event is atomic. For example, the UUID of the reply post discussed in notification.
-  target_id String
+  /// Type of notification (e.g., reply, mention, flag, mod_action,
+  /// system_alert, poll_close, etc.) - used to drive business and UI logic.
+  type String
   
-  /// Notification message content to show the user (in-app or as short text/email). Implements audit and notification requirements by recording the actual notification content. Atomic and not pre-rendered; for example, 'You have a new reply in Thread X.'
-  message String
+  /// Delivery/read status: one of 'unread', 'read', 'delivered', 'archived',
+  /// 'failed'. Used to filter in notification center and trigger UX badges.
+  status String
   
-  /// Timestamp when the notification was sent/delivered to the user. Implements delivery tracking and audit requirement. Compliant with normalization (not pre-aggregated). For example, when an email or in-app event is triggered.
-  delivered_at DateTime
+  /// Short notification title or summary (for display in notification center
+  /// previews).
+  title String?
   
-  /// Timestamp when the notification was read/opened by the user. Optional (null if unread). Implements read/unread features and audit trail. For example, when the user first clicks on the notification.
-  read_at DateTime?
+  /// Notification content/body, typically short and context-focused. HTML/text
+  /// allowed per business policy.
+  body String?
   
-  /// Status of the notification delivery (e.g., 'delivered', 'failed', 'pending'). Implements feedback loop and business requirement for retry or diagnostics. For example, 'failed' if the user's email bounced.
-  delivery_status String
+  /// Link or URI for user action (e.g., "go to post", "view comment"). Null if
+  /// system/informational only.
+  action_url String? @db.VarChar(80000)
   
-  /// Optional reason for failure if delivery_status is 'failed'. Implements troubleshooting and analytics requirements - always nullable. For example, 'invalid email address' or 'unsubscribed'.
+  /// Reason for delivery failure (if status is 'failed'). May contain
+  /// business-level reason or error code. Null if delivered/successful.
   failure_reason String?
+  
+  /// Notification creation timestamp (when notification was generated).
+  created_at DateTime @db.Timestamptz
+  
+  /// When notification was (attempted to be) delivered (e.g., pushed, sent,
+  /// shown). Nullable if not delivered yet.
+  delivered_at DateTime? @db.Timestamptz
+  
+  /// When recipient read the notification (set by user interaction, system, or
+  /// push). Null if not yet read.
+  read_at DateTime? @db.Timestamptz
+  
+  /// Soft-deletion timestamp. Null if not (soft-)deleted.
+  deleted_at DateTime? @db.Timestamptz
   
   //----
   // RELATIONS
   //----
-  fk_discussion_board_notifications_recipient discussion_board_members @relation(fields: [recipient_id], references: [id], onDelete: Cascade)
-  fk_discussion_board_notifications_subscription discussion_board_subscriptions? @relation(fields: [subscription_id], references: [id], onDelete: Cascade)
+  recipientUser discussion_board_users @relation("discussion_board_notifications_of_recipient_user_id", fields: [recipient_user_id], references: [id], onDelete: Cascade)
+  actorUser discussion_board_users? @relation("discussion_board_notifications_of_actor_user_id", fields: [actor_user_id], references: [id], onDelete: Cascade)
+  post discussion_board_posts? @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  comment discussion_board_comments? @relation(fields: [comment_id], references: [id], onDelete: Cascade)
   
-  @@index([subscription_id])
+  @@unique([recipient_user_id, type, action_url, created_at], map: "discussion_board_notifications_recipient_user_id_type__7283f99a")
+  @@index([recipient_user_id, status, created_at], map: "discussion_board_notifications_recipient_user_id_statu_382ed7fb")
+  @@index([actor_user_id])
+  @@index([post_id])
+  @@index([comment_id])
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([body(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// Per-user notification preference settings: Each record applies to a
+/// specific user and defines delivery channel choices (in-app, email, push),
+/// frequency, and opt-in/out preferences for each notification
+/// type/category. Managed independently by the user. Critical for respecting
+/// user contact permissions and compliance requirements.
+///
+/// @namespace Notifications
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_notification_preferences {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
   
-  @@unique([recipient_id, target_type, target_id, notification_type], map: "discussion_board_notifications_recipient_id_target_typ_28e3c210")
-  @@index([delivered_at])
-  @@index([recipient_id, delivered_at])
+  /// Notification preference owner's {@link discussion_board_users.id}.
+  /// References the user this preference set belongs to.
+  user_id String @db.Uuid
+  
+  /// Whether the user enables email notifications for this category (true:
+  /// allowed, false: suppressed).
+  email_enabled Boolean
+  
+  /// Whether the user enables push notifications for this category.
+  push_enabled Boolean
+  
+  /// Whether the user enables in-app notifications for this category
+  /// (notification center, banners, etc.).
+  in_app_enabled Boolean
+  
+  /// Notification delivery frequency: e.g., 'immediate', 'digest_daily',
+  /// 'digest_weekly'. Directs scheduling for batch or real-time delivery.
+  frequency String
+  
+  /// CSV or JSON-encoded list of notification categories/types this preference
+  /// applies to. (e.g., 'reply,mention,mod_action').
+  categories String
+  
+  /// Suppress notifications for all categories until this datetime. Null if
+  /// not muted.
+  mute_until DateTime? @db.Timestamptz
+  
+  /// Creation timestamp for this preference record.
+  created_at DateTime @db.Timestamptz
+  
+  /// Last updated timestamp for this preferences record.
+  updated_at DateTime @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  user discussion_board_users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([user_id])
+  @@index([categories(ops: raw("gin_trgm_ops"))], type: Gin)
+}
+
+/// Represents persistent notification subscriptions: Each record describes a
+/// user following a topic, category, or post/thread
+/// (subscription_target_type/target_id). Enables delivery of notifications
+/// whenever the subscribed entity (category, thread, post, etc.) is updated
+/// or triggers an event. Users can manage these subscriptions independently,
+/// and unsubscribe at any time.
+///
+/// @namespace Notifications
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discussion_board_notification_subscriptions {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id @db.Uuid
+  
+  /// Subscribing user's {@link discussion_board_users.id}. The user who
+  /// follows or subscribes to event delivery.
+  user_id String @db.Uuid
+  
+  /// Type of entity being followed (e.g., 'post', 'thread', 'category', 'tag',
+  /// 'user') for polymorphic delivery.
+  subscription_target_type String
+  
+  /// Entity ID being followed/subscribed (FK to target entity, not enforced
+  /// here due to polymorphism).
+  subscription_target_id String @db.Uuid
+  
+  /// Timestamp when subscription was created.
+  created_at DateTime @db.Timestamptz
+  
+  /// If present, marks a soft delete (unsubscribed). Still retained for
+  /// compliance/audit.
+  deleted_at DateTime? @db.Timestamptz
+  
+  //----
+  // RELATIONS
+  //----
+  user discussion_board_users @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  
+  @@unique([user_id, subscription_target_type, subscription_target_id], map: "discussion_board_notification_subscriptions_user_id_su_160be914")
+  @@index([subscription_target_type, subscription_target_id], map: "discussion_board_notification_subscriptions_subscripti_eac49167")
 }

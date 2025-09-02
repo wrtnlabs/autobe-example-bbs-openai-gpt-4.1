@@ -1,2 +1,1 @@
-export * as versions from "./versions";
-export * as attachments from "./attachments";
+export * as polls from "./polls";

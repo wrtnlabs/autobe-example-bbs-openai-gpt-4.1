@@ -4,12 +4,12 @@
 
 - [Systematic](#systematic)
 - [Actors](#actors)
-- [Articles](#articles)
-- [Comments](#comments)
+- [Content](#content)
+- [Voting](#voting)
 - [Moderation](#moderation)
 - [Notifications](#notifications)
-- [Analytics](#analytics)
-- [default](#default)
+- [Session](#session)
+- [Compliance](#compliance)
 
 ## Systematic
 
@@ -19,685 +19,1410 @@ erDiagram
   String id PK
   String name UK
   String description "nullable"
-  String parent_id "nullable"
+  Boolean is_active
+  Int sort_order
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_tags" {
+  String id PK
+  String label UK
+  String description "nullable"
   Boolean is_active
   DateTime created_at
   DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_category_tag_relations" {
+  String id PK
+  String discussion_board_category_id FK
+  String discussion_board_tag_id FK
+  DateTime created_at
 }
 "discussion_board_settings" {
   String id PK
-  String setting_key UK
-  String setting_value
+  String key UK
+  String value
   String description "nullable"
+  Boolean is_system
   DateTime created_at
   DateTime updated_at
-}
-"discussion_board_category_moderators" {
-  String id PK
-  String category_id FK
-  String moderator_id FK
-  DateTime created_at
+  DateTime deleted_at "nullable"
 }
 "discussion_board_audit_logs" {
   String id PK
-  String actor_id FK "nullable"
-  String target_id FK "nullable"
+  String actor_id "nullable"
+  String actor_role
   String action_type
-  String action_detail "nullable"
+  String target_object "nullable"
+  String description "nullable"
   DateTime created_at
 }
-"discussion_board_system_notices" {
+"discussion_board_action_logs" {
   String id PK
-  String category_id FK "nullable"
-  String title
-  String body
-  Boolean is_active
-  DateTime start_at "nullable"
-  DateTime end_at "nullable"
+  String discussion_board_audit_log_id FK
+  String status
+  String metadata "nullable"
   DateTime created_at
-  DateTime updated_at
 }
-"discussion_board_category_moderators" }o--|| "discussion_board_categories" : discussion_board_category_moderators_category_id_fkey
-"discussion_board_audit_logs" }o--o| "discussion_board_categories" : discussion_board_audit_logs_target_id_fkey
-"discussion_board_system_notices" }o--o| "discussion_board_categories" : discussion_board_system_notices_category_id_fkey
+"discussion_board_category_tag_relations" }o--|| "discussion_board_categories" : category
+"discussion_board_category_tag_relations" }o--|| "discussion_board_tags" : tag
+"discussion_board_action_logs" }o--|| "discussion_board_audit_logs" : auditLog
 ```
 
 ### `discussion_board_categories`
 
-Discussion Board Category - Implements category management and administration from requirements.
+Represents discussion categories within the board (e.g. Politics,
+Economics, Society). Used for organizing posts and threads into topical
+groups. Supports CRUD and independent administration. Categories can have
+multiple tags via discussion_board_category_tag_relations. Frequently
+referenced by posts for content classification.
 
 Properties as follows:
 
 - `id`: Primary Key.
-- `name`: Category name. Unique, used to group topics.
-- `description`: Optional details about the category's use or scope.
-- `parent_id`: Self-reference for hierarchy. Null for top-level categories.
-- `is_active`: Is the category currently enabled for participation?
-- `created_at`: Creation timestamp for this category row.
-- `updated_at`: Last updated timestamp for this row.
+- `name`: Category display name. Unique and user-facing (e.g. 'Politics').
+- `description`: Human-readable description for moderators and users.
+- `is_active`: Whether this category is currently active and visible to users.
+- `sort_order`: Manual sort order for displaying categories.
+- `created_at`: Timestamp when category was created.
+- `updated_at`: Timestamp when category was last updated.
+- `deleted_at`: Timestamp for soft deletion; null means not deleted.
+
+### `discussion_board_tags`
+
+Vocabulary of tags that can be assigned to categories and posts. Tags
+enable faceted search, topic suggestions, and content filtering. Tags are
+managed independently; supports CRUD and list operations. Tags can be
+assigned to many categories (see
+discussion_board_category_tag_relations).
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `label`: Tag label as seen by users. Must be unique (case-insensitive).
+- `description`: Optional human-readable description for users/moderators.
+- `is_active`: Whether the tag can currently be assigned.
+- `created_at`: Timestamp when tag was registered.
+- `updated_at`: Timestamp when tag was last updated.
+- `deleted_at`: Timestamp for soft deletion; null = not deleted.
+
+### `discussion_board_category_tag_relations`
+
+Junction table for many-to-many relation between categories and tags.
+Allows a category to have multiple tags and vice versa. Only stores
+references; maintains referential integrity and disables duplicates.
+Managed internally; users assign tags to categories via admin/control
+panels.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `discussion_board_category_id`: Linked category's [discussion_board_categories.id](#discussion_board_categories)
+- `discussion_board_tag_id`: Linked tag's [discussion_board_tags.id](#discussion_board_tags)
+- `created_at`: Timestamp when this association was created.
 
 ### `discussion_board_settings`
 
-Discussion Board persistent settings table for board-level options and toggles.
+Holds global/system-wide configuration values (e.g., max post length,
+flags thresholds, maintenance flags). Settings are key-value, with
+standard metadata, allowing dynamic system reconfiguration without code
+deployments. Supports secure audit of changes.
 
 Properties as follows:
 
 - `id`: Primary Key.
-- `setting_key`: Setting key, e.g., 'registration_open'. Must be unique.
-- `setting_value`: Value of the setting. Text-based for flexibility.
-- `description`: Optional description of what this setting controls.
-- `created_at`: Creation timestamp for this setting row.
-- `updated_at`: Last updated timestamp for this row.
-
-### `discussion_board_category_moderators`
-
-Junction table mapping moderators to categories for M:N relationship per requirements. Each assignment is unique per (category_id, moderator_id).
-
-Properties as follows:
-
-- `id`: Primary Key.
-- `category_id`: Reference to discussion_board_categories.id.
-- `moderator_id`: Reference to discussion_board_moderators.id (from Actors schema).
-- `created_at`: Assignment event creation timestamp.
+- `key`
+  > Unique identifier for this setting (e.g. 'max_post_length',
+  > 'flag_threshold').
+- `value`
+  > Serialized config value for interpretation by the app (stringified JSON
+  > for complex data if needed).
+- `description`: Human-intelligible explanation of this setting.
+- `is_system`: Whether this setting is system-level (vs business-level).
+- `created_at`: Timestamp when setting was registered.
+- `updated_at`: Timestamp when setting was last updated.
+- `deleted_at`: Timestamp for soft deletion.
 
 ### `discussion_board_audit_logs`
 
-System auditing log for key events (config changes, assignments, bans, etc.). Append-only. Used for compliance and troubleshooting.
+Audit log for all major platform actions: configuration changes, role
+changes, moderation decisions, and critical system events. Each record
+includes metadata and references to the actor where possible (e.g., user,
+moderator, admin). Used for legal, compliance, and business/technical
+auditing.
 
 Properties as follows:
 
 - `id`: Primary Key.
-- `actor_id`: ID (UUID) of actor (admin/moderator/member/user) who performed the event. Null for system actions.
-- `target_id`: Generic target object id affected by the action. Null if not applicable.
-- `action_type`: Type of action performed (e.g., 'assign_moderator').
-- `action_detail`: Additional details or context for the event. Null if not given.
-- `created_at`: Event timestamp for the audit log entry.
+- `actor_id`
+  > Optional reference to the acting user (visitor, user, moderator, or
+  > admin), if applicable. Null for system actions.
+- `actor_role`
+  > Role of acting entity at time of action ('visitor', 'user', 'moderator',
+  > 'admin', or 'system').
+- `action_type`
+  > Type/category of action performed (e.g., 'config_update',
+  > 'role_assignment', 'moderation', 'login').
+- `target_object`
+  > Subject entity/object of the action. E.g., which setting, user, post,
+  > etc. (Flexible string).
+- `description`: Human-readable description, suited for compliance reviews.
+- `created_at`: Action event timestamp; represents when it occurred.
 
-### `discussion_board_system_notices`
+### `discussion_board_action_logs`
 
-System notices/messages for all or selected users (e.g., banners, important updates, system-wide or per-category, possibly scheduled).
+Detailed per-action log entries as a subsidiary to the audit log. Used
+for lower-level action tracing, debugging, and advanced compliance. Each
+action log entry references audit logs and provides granular metadata
+(status, payloads, errors, etc.). Not independently user-facing; supports
+system/compliance tracing.
 
 Properties as follows:
 
 - `id`: Primary Key.
-- `category_id`: Optional reference to discussion_board_categories.id. Null means global notice.
-- `title`: Notice headline/title.
-- `body`: Message content for the notice.
-- `is_active`: Is the notice currently displayed/shown?
-- `start_at`: Optional start date for scheduling visible time. Null = always until end_at.
-- `end_at`: Optional end date for scheduling end of visibility. Null = indefinite.
-- `created_at`: Creation time for audit/history.
-- `updated_at`: Last updated time.
+- `discussion_board_audit_log_id`
+  > Reference to the master audit log entry {@link
+  > discussion_board_audit_logs.id}
+- `status`: Outcome of the action (e.g., 'success', 'fail', 'partial', or custom).
+- `metadata`
+  > Serialized contextual metadata (JSON). As detailed as needed for
+  > compliance or debugging.
+- `created_at`: Timestamp at which the action log was recorded.
 
 ## Actors
 
 ```mermaid
 erDiagram
-"discussion_board_admins" {
+"discussion_board_visitors" {
   String id PK
-  String user_identifier UK
-  DateTime granted_at
-  DateTime revoked_at "nullable"
-}
-"discussion_board_moderators" {
-  String id PK
-  String user_identifier UK
-  DateTime granted_at
-  DateTime revoked_at "nullable"
-}
-"discussion_board_members" {
-  String id PK
-  String user_identifier UK
-  DateTime joined_at
-  DateTime suspended_at "nullable"
-}
-"discussion_board_guests" {
-  String id PK
-  String session_identifier UK
-  DateTime first_seen_at
-  DateTime last_seen_at
-}
-"discussion_board_user_sessions" {
-  String id PK
-  String actor_type
-  String actor_identifier
-  String session_token UK
-  DateTime created_at
-  DateTime expires_at
-  DateTime terminated_at "nullable"
-}
-```
-
-### `discussion_board_admins`
-
-Discussion Board Admins - This implements the requirement for full-platform control and high-level configuration as described in roles and permissions requirements. 
-
-Admins manage the system's configuration, assign or revoke moderation privileges, configure categories, and have access to analytics, audit logs, and sensitive management features. Maintains 3NF compliance by isolating admin-specific data from other actor roles. For example, when a new admin is registered or an existing member is promoted, a single record is created here with responsible actor and relevant timestamps. 
-
-Key relationships: Typically references a user identity core record (external) and logs role-specific metadata. 
-Special behaviors: Only records in this table may alter board configuration or perform overarching system management actions.
-
-Properties as follows:
-
-- `id`: Primary Key. Unique identifier for each admin actor instance.
-- `user_identifier`: User identifier - Implements the admin mapping aspect from requirements. The business user (system-wide or external reference, e.g., email or UID) that this admin role is assigned to. Ensures normalization by storing a single atomic identifier. For example, the platform user's UUID or SSO ID. Cannot be null.
-- `granted_at`: Grant timestamp - Represents when admin privileges were assigned. This supports audit trails, ensuring full actor traceability. For example, when a user is promoted, this is set to current timestamp.
-- `revoked_at`: Revocation timestamp - If admin rights are rescinded, this records when. Normalization ensures separation from business data—no status flags, just event time. For example, set when admin demotion is processed. Nullable (current if null).
-
-### `discussion_board_moderators`
-
-Discussion Board Moderators - Fulfills the requirement for stewardship, moderation, and enforcement powers outlined in the business requirements. 
-
-Stores data on platform-approved moderators who manage flagged content, enforce rules, and resolve user reports. Maintains 3NF: Contains only moderator-specific role/temporal status info, not general user info.
-
-Usage: When an admin appoints a user as moderator, this model is updated. Example: moderator is temporarily promoted, tracked by granted/revoked timestamps.
-
-Key relationships: Should reference the user identity core record (external). Special behaviors: Only these users may moderate board content. Moderator history allows for temporary appointments and role audits.
-
-Properties as follows:
-
-- `id`: Primary Key. Unique identifier for the moderator role assignment.
-- `user_identifier`: User identifier - Implements role actor mapping. Identifies which user has moderator privilege. Ensures a flexible mapping to central user/auth system. Example: contains user UUID. Non-nullable.
-- `granted_at`: Role grant timestamp - Implements time-based access control for moderators. Defines when privilege started. Ensures normalized audit trail: e.g., moderating user granted the role on this date.
-- `revoked_at`: Role revocation timestamp - Supports time-boxed moderator roles and historical traceability for audit. Null if moderator powers still active. Example: removed when privilege is lost or user is demoted. Nullable.
-
-### `discussion_board_members`
-
-Discussion Board Members - This captures all active registered users per system requirements. Implements business requirement for authenticated users with member privileges who can post, comment, report, and otherwise participate fully on the board.
-
-Is strictly 3NF: contains only what is unique/relevant to the member role, not detailed user data or computed features. For example, a new member record is created upon registration or promotion from guest status.
-
-Key relationships: May reference external user directory/identity tables.
-Special behaviors: Additional flags/elevation handled via role-specific models (admin, moderator, etc.). Only users listed here may create threads or comments.
-
-Properties as follows:
-
-- `id`: Primary Key. Unique identifier for registered member record.
-- `user_identifier`: User identifier - Implements member-account mapping to platform-wide or external user. Ensures atomic mapping to user identity. Example: could be user UUID, email, SSO subject. Non-nullable.
-- `joined_at`: Join timestamp - When the member registered on the board. Enables user analytics/audit logging. For example, set to creation date for analytics use.
-- `suspended_at`: Suspension timestamp - If the member is barred from participation, logs when suspension took effect. Normalized: retains only the timestamp, not pre-calculated status. Null if active.
-
-### `discussion_board_guests`
-
-Discussion Board Guests - Implements the requirement for unauthenticated users who may browse (but not act) on public content, as per business requirements. 
-
-Stores session-level tracking for guests (cookies, tokens, or temporary IDs) to distinguish unique visitors, support analytics, or inform onboarding flows (e.g., one-time announcements).
-
-3NF: No computed access flags, just raw identity and time stamps. Example: new guest detected (session/cookie assignment) creates a record here for behavior tracking until registration.
-
-Key relationships: Standalone design, with possible linkage to analytics/log tables.
-Special behaviors: Only guests here are treated as unique browsers for basic auditing—no personal data unless promoted to member.
-
-Properties as follows:
-
-- `id`: Primary Key. Unique ID for the tracked guest session.
-- `session_identifier`: Session identifier - Implements tracking of guest/visitor session via cookie/token/UUID. Ensures atomicity and normalizes identification for auditing/analytics. For example, a one-time session ID. Required for all guest sessions.
-- `first_seen_at`: First seen timestamp - When this guest was first detected by the system. For session analysis/onboarding optimization. Non-nullable.
-- `last_seen_at`: Last seen timestamp - Last activity by this guest before exit or registration. Helps track unique visitors and session duration; normalized storage. Non-nullable.
-
-### `discussion_board_user_sessions`
-
-Discussion Board User Sessions - Fulfills the cross-role requirement for persistent login/session tracking to support authentication, session management, and traceability, as required by the technical/API documentation.
-
-Manages every authenticated or tracked session (admin, moderator, member, or guest), enabling token-based authentication, session expiry, user-actor analytics, and auto-logout on privilege changes. Maintains 3NF: holds only direct session facts, not computed fields or summaries. Example: a user logs in, a session is created here with user and session info, plus expiry fields for security/audit logging.
-
-Key relationships: Should reference user identifier (admin, moderator, member) or guest session. No other foreign keys—designed for compatibility with all actor types.
-
-Special behaviors: Only these records define active sessions. Session termination/expiry and forced logout for security is enforced by updating or nulling the termination timestamp. Role/applicable features determined externally (not here).
-
-Properties as follows:
-
-- `id`: Primary Key. Unique identifier for the user/guest session.
-- `actor_type`: Actor type - Group discriminator (e.g., 'admin', 'moderator', 'member', 'guest'). Implements cross-role session context, as required by session management documentation. Ensures normalization by direct storage; no duplication of other user data. Example: 'moderator'. Non-nullable.
-- `actor_identifier`: Actor identifier - Implements session-to-user/guest linkage (contains user_identifier or session_identifier as per actor_type). Normalizes reference to actor record, following atomic data principles. Non-nullable.
-- `session_token`: Session token - Stores opaque session token (e.g., JWT, UUID, cookie) for authentication. Supports per-session tracking for forced logouts, API/request scoping. Normalization: only token string, never computed status. Example: a unique token generated at login. Non-nullable.
-- `created_at`: Session creation timestamp - For session timeline, auditing, and active user tracking. Example: when login completes or guest arrives. Non-nullable.
-- `expires_at`: Session expiry timestamp - When session is set to expire; enables auto-logout, security enforcement, and short/long session analytics. Non-nullable.
-- `terminated_at`: Termination timestamp (logout/kicked/timeout) - Supports hard logouts, token revocation, audit trails for suspicious/revoked sessions. Normalized: timestamp only, nullable if not terminated yet. For example, updated on manual logout, role loss, or session timeout. Nullable.
-
-## Articles
-
-```mermaid
-erDiagram
-"discussion_board_topics" {
-  String id PK
-  String discussion_board_category_id FK
-  String creator_member_id FK
-  String title
-  String description "nullable"
-  Boolean pinned
-  Boolean closed
-  DateTime created_at
-  DateTime updated_at
-}
-"discussion_board_threads" {
-  String id PK
-  String discussion_board_topic_id FK
-  String creator_member_id FK
-  String title
-  DateTime created_at
-  DateTime updated_at
-}
-"discussion_board_posts" {
-  String id PK
-  String discussion_board_thread_id FK
-  String creator_member_id FK
-  String body
-  Boolean is_edited
+  String visitor_token UK
+  String ip_address "nullable"
+  String user_agent "nullable"
   DateTime created_at
   DateTime updated_at
   DateTime deleted_at "nullable"
 }
-"discussion_board_post_versions" {
+"discussion_board_users" {
   String id PK
-  String discussion_board_post_id FK
-  String editor_member_id FK
-  Int version
-  String body
+  String email UK
+  String username UK
+  String display_name "nullable"
+  String password_hash
+  Boolean is_verified
+  Boolean is_suspended
+  DateTime suspended_until "nullable"
+  DateTime last_login_at "nullable"
   DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
 }
-"discussion_board_post_attachments" {
+"discussion_board_moderators" {
   String id PK
-  String discussion_board_post_id FK
-  String uploader_member_id FK
-  String(80000) file_uri
-  String file_name
-  String mime_type
-  DateTime uploaded_at
+  String user_id UK
+  DateTime assigned_at
+  DateTime revoked_at "nullable"
+  Boolean is_active
+  DateTime suspended_until "nullable"
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
 }
-"discussion_board_threads" }o--|| "discussion_board_topics" : topic
-"discussion_board_posts" }o--|| "discussion_board_threads" : thread
-"discussion_board_post_versions" }o--|| "discussion_board_posts" : post
-"discussion_board_post_attachments" }o--|| "discussion_board_posts" : post
+"discussion_board_admins" {
+  String id PK
+  String user_id UK
+  DateTime assigned_at
+  DateTime revoked_at "nullable"
+  Boolean is_active
+  DateTime suspended_until "nullable"
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
 ```
 
-### `discussion_board_topics`
+### `discussion_board_visitors`
 
-Topics on the discussion board - Implements the requirements for topic and thread management from the Features & Workflow documentation, supporting the creation and organization of main discussion areas. This model allows users to see a list of topics, and admins/moderators to manage (pin, close, delete) topics. Maintains 3NF compliance by keeping only atomic, non-aggregated data with referential integrity for creator, category, and status. Key relationships: category (to discussion_board_categories) and creator (to discussion_board_members). Special behaviors: topics may be pinned, closed, or deleted; closure restricts new posts at thread level.
-
-Properties as follows:
-
-- `id`: Primary Key. Unique identifier for each topic.
-- `discussion_board_category_id`: Category association – References the parent category's [discussion_board_categories.id](#discussion_board_categories) for hierarchical topic organization.
-- `creator_member_id`: Creator member – References the member's [discussion_board_members.id](#discussion_board_members) who created the topic, needed for audit trail and permissions enforcement.
-- `title`: Topic title - Short text for headline display. Atomic, normalized.
-- `description`: Topic description - Provides summary or guidelines for the topic. Optional, can be null for brief topics.
-- `pinned`: Indicates if topic is pinned.
-- `closed`: Indicates if topic is closed.
-- `created_at`: Timestamp of topic creation.
-- `updated_at`: Timestamp of last update to the topic.
-
-### `discussion_board_threads`
-
-Threads within a topic - Implements threaded sub-discussions for separate conversations under one topic. Each thread belongs to a topic, and to a creator member. Fully normalized. Closure of parent topic invalidates new threads/posts.
+Tracks anonymous or unauthenticated actors (visitors) for auditing,
+analytics, and potential future privilege escalation. Each record
+represents an individual visitor session or unique actor basis. Enables
+future anonymous posting privileges, per-visitor fraud detection, and
+regulatory compliance. No PII captured unless elevated. Provides soft
+deletion for retention management.
 
 Properties as follows:
 
-- `id`: Primary Key. Unique identifier for each thread.
-- `discussion_board_topic_id`: Parent topic – References [discussion_board_topics.id](#discussion_board_topics), linking thread to its top-level area.
-- `creator_member_id`: Thread starter – References the member's [discussion_board_members.id](#discussion_board_members) who created the thread.
-- `title`: Thread title - User-provided, atomic.
-- `created_at`: Timestamp when thread created.
-- `updated_at`: Timestamp of last update/modification.
+- `id`: Primary Key.
+- `visitor_token`
+  > Opaque, non-reversible unique token identifying a visitor. Used for
+  > session tracking and fraud detection. Never linked to PII.
+- `ip_address`
+  > IP address used to access the service. Used only for security, fraud
+  > detection, and audit; deleted/pseudonymized per policy.
+- `user_agent`
+  > User agent string or device fingerprint as received. Used for analytic
+  > and anti-abuse measures.
+- `created_at`: Timestamp when the visitor record was created.
+- `updated_at`: Timestamp when the visitor record was last updated.
+- `deleted_at`: Timestamp when the visitor record was soft-deleted (if applicable).
 
-### `discussion_board_posts`
+### `discussion_board_users`
 
-Atomic posts in discussion threads - Implements posting and commenting functionality. Each post is an individual contribution to a thread and references its creator and thread. Designed for atomic, normalized content. Soft-deletion handled by deleted_at. No aggregation of comment count/etc.
-
-Properties as follows:
-
-- `id`: Primary Key. Unique identifier for each post.
-- `discussion_board_thread_id`: Parent thread – References [discussion_board_threads.id](#discussion_board_threads).
-- `creator_member_id`: Post author – References [discussion_board_members.id](#discussion_board_members).
-- `body`: Post body - Markdown/atomic text. Not calculated.
-- `is_edited`: Edit status - True if post edited. Atomic flag, 3NF compliant.
-- `created_at`: Time of post creation.
-- `updated_at`: Time of last update.
-- `deleted_at`: Deletion timestamp if soft-deleted. Nullable.
-
-### `discussion_board_post_versions`
-
-Snapshots of post revisions (version history/audit) - Implements snapshot-based architecture for post edit tracking, supporting rollback and audit history. Each entry stores a snapshot of the post content and incrementing version number. No aggregation. Each version is linked to an editor and to the associated post.
+Core registered and authenticated user actors. Each represents a member
+with standard posting, commenting, voting, and flagging privileges. Email
+and username must be unique. Contains authentication and profile
+metadata. Subject to verification, suspension, and role escalation.
+Provides soft deletion for compliance.
 
 Properties as follows:
 
-- `id`: Primary Key. Unique, immutable identifier for each versioned snapshot.
-- `discussion_board_post_id`: Target post – References [discussion_board_posts.id](#discussion_board_posts).
-- `editor_member_id`: Editor responsible for this version – References [discussion_board_members.id](#discussion_board_members).
-- `version`: Version number - Starts at 1, increments per edit.
-- `body`: Snapshot of post content.
-- `created_at`: Timestamp when version created.
+- `id`: Primary Key.
+- `email`: User email address, used for login and communication. Must be unique.
+- `username`: Unique username chosen by the user; displayed as handle on posts/comments.
+- `display_name`: User's display name or nickname for personalized experience.
+- `password_hash`: Secure password hash for authentication. Raw passwords are never stored.
+- `is_verified`: Whether the user's email has been verified.
+- `is_suspended`: Whether the user is currently suspended from activity.
+- `suspended_until`
+  > If suspended, date-time until which user cannot interact. Null if not
+  > suspended.
+- `last_login_at`: Date-time of the user's last successful login.
+- `created_at`: Timestamp when the user record was created.
+- `updated_at`: Timestamp when the user record was last updated.
+- `deleted_at`: Timestamp when the user record was soft-deleted (if applicable).
 
-### `discussion_board_post_attachments`
+### `discussion_board_moderators`
 
-Attachment files for posts - Stores pure file/link metadata with reference to its post. Files are stored externally as URIs. Soft deletes handled via post or by removing external file, not by field aggregation. Each attachment links to both the post and uploader member.
+Table of actors with assigned moderator status. Moderators are registered
+users with elevated permissions for content and user management.
+Assignment/removal is managed by admins; assignment events are logged
+externally. Includes privileged status and active window. Independent
+management supports auditing of promotion/demotion and moderator-specific
+attributes. Provides soft deletion for compliance.
 
 Properties as follows:
 
-- `id`: Primary Key. Unique identifier for each attachment.
-- `discussion_board_post_id`: Associated post – References [discussion_board_posts.id](#discussion_board_posts).
-- `uploader_member_id`: Uploader – References [discussion_board_members.id](#discussion_board_members).
-- `file_uri`: Location of the attachment file (external or CDN URI). Atomic, normalized.
-- `file_name`: Original file name. Plain text, atomic.
-- `mime_type`: Attachment MIME type. E.g., 'image/png'.
-- `uploaded_at`: Timestamp when file uploaded. Atomic event.
+- `id`: Primary Key.
+- `user_id`
+  > Associated user actor's id promoted to moderator role. Duplicates user
+  > data for audit separation and role-specific attributes.
+- `assigned_at`: Timestamp when moderator role was assigned.
+- `revoked_at`
+  > Timestamp moderator privileges were revoked, if ever. Null if currently
+  > active.
+- `is_active`: Whether the moderator is currently active (not revoked or suspended).
+- `suspended_until`: Moderator-specific suspension window, if applicable.
+- `created_at`: Timestamp when the moderator record was created.
+- `updated_at`: Timestamp when the moderator record was last updated.
+- `deleted_at`: Timestamp when the moderator record was soft-deleted (if applicable).
 
-## Comments
+### `discussion_board_admins`
+
+Platform/system administrators with the highest permissions. This table
+tracks all admin actors, with status, assignment, suspension, and audit
+fields. Admin management is independent for audit/control.
+Assignment/removal is always by root/admin. No calculated fields.
+Provides soft deletion for regulatory compliance.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `user_id`
+  > Associated user actor's id with admin role. Allows admin-specific
+  > privileges, assignment/revocation audit, and separation of admin status.
+- `assigned_at`: Timestamp when admin status/role was granted.
+- `revoked_at`
+  > Timestamp when admin privileges were revoked, if ever. Null if currently
+  > active.
+- `is_active`: Whether the admin is currently active (not revoked or suspended).
+- `suspended_until`: Admin-specific suspension window, if applicable.
+- `created_at`: Timestamp when the admin record was created.
+- `updated_at`: Timestamp when the admin record was last updated.
+- `deleted_at`: Timestamp when the admin record was soft-deleted (if applicable).
+
+## Content
 
 ```mermaid
 erDiagram
-"discussion_board_comments" {
+"discussion_board_threads" {
   String id PK
-  String discussion_board_member_id FK
-  String discussion_board_post_id FK
-  String content
-  Boolean is_deleted
+  String created_by_id FK
+  String title UK
+  Boolean is_locked
+  Boolean is_archived
   DateTime created_at
   DateTime updated_at
+  DateTime deleted_at "nullable"
 }
-"discussion_board_comment_versions" {
+"discussion_board_posts" {
   String id PK
-  String discussion_board_comment_id FK
-  String editor_member_id FK
-  String content
+  String thread_id FK
+  String created_by_id FK
+  String title
+  String body
+  Boolean is_locked
   DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
 }
-"discussion_board_comment_attachments" {
+"discussion_board_post_edit_histories" {
   String id PK
-  String discussion_board_comment_id FK
-  String uploader_member_id FK
-  String file_name
-  String(80000) file_url
-  String mime_type
-  DateTime uploaded_at
+  String post_id FK
+  String edited_by_id FK
+  String title
+  String body
+  DateTime edited_at
 }
-"discussion_board_comment_versions" }o--|| "discussion_board_comments" : fk_comment_versions_comment
-"discussion_board_comment_attachments" }o--|| "discussion_board_comments" : fk_comment_attachments_comment
+"discussion_board_comments" {
+  String id PK
+  String post_id FK
+  String parent_id FK "nullable"
+  String created_by_id FK
+  String body
+  Int nesting_level
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_comment_edit_histories" {
+  String id PK
+  String comment_id FK
+  String edited_by_id FK
+  String body
+  DateTime edited_at
+}
+"discussion_board_attachments" {
+  String id PK
+  String post_id FK "nullable"
+  String comment_id FK "nullable"
+  String uploaded_by_id FK
+  String file_name
+  String(80000) file_url UK
+  String content_type
+  Int size_bytes
+  DateTime created_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_posts" }o--|| "discussion_board_threads" : thread
+"discussion_board_post_edit_histories" }o--|| "discussion_board_posts" : post
+"discussion_board_comments" }o--|| "discussion_board_posts" : post
+"discussion_board_comments" }o--o| "discussion_board_comments" : parent
+"discussion_board_comment_edit_histories" }o--|| "discussion_board_comments" : comment
+"discussion_board_attachments" }o--o| "discussion_board_posts" : post
+"discussion_board_attachments" }o--o| "discussion_board_comments" : comment
 ```
+
+### `discussion_board_threads`
+
+Discussion threads serve as the top-level grouping mechanism for related
+posts and comments. Each thread represents a distinct discussion topic or
+theme, acting as the root node for all hierarchical content beneath it.
+Threads can be locked or archived for moderation purposes. Supports
+search by title, status, and created_by user. Soft deletion is supported
+for compliance.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `created_by_id`
+  > Creator's [discussion_board_users.id](#discussion_board_users). References the user who
+  > started the thread.
+- `title`: Title of the discussion thread, used for identification and search.
+- `is_locked`: Whether the thread is currently locked for further posting or commenting.
+- `is_archived`: Whether the thread has been archived. Archived threads are read-only.
+- `created_at`: Timestamp when the thread was created.
+- `updated_at`: Timestamp when the thread was last updated.
+- `deleted_at`
+  > When present, indicates the thread was soft deleted (hidden from general
+  > view).
+
+### `discussion_board_posts`
+
+Posts are the primary content units within discussion threads. Each post
+belongs to a thread, can reference an author (user), and is subject to
+edit history tracking. Each post may be flagged, commented on, or
+moderated. Soft deletion is standard for user and regulatory compliance.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `thread_id`
+  > Target thread's [discussion_board_threads.id](#discussion_board_threads). Indicates thread
+  > this post belongs to.
+- `created_by_id`
+  > Author's [discussion_board_users.id](#discussion_board_users). Indicates the user who
+  > submitted this post.
+- `title`: Post title, used for identification within thread and for search.
+- `body`: Rich text body of the post content.
+- `is_locked`: Whether this post is locked for editing or commenting.
+- `created_at`: Timestamp when the post was created.
+- `updated_at`: Timestamp when the post was last updated.
+- `deleted_at`: Soft delete timestamp; if set, post is not visible to regular users.
+
+### `discussion_board_post_edit_histories`
+
+Edit history (snapshot) table for posts. Stores previous versions of each
+post for audit, compliance, or moderation review. Each record is linked
+to the original post and contains the full previous snapshot of the
+post's contents. Append-only by design.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `post_id`
+  > Target post's [discussion_board_posts.id](#discussion_board_posts) for which the snapshot is
+  > stored.
+- `edited_by_id`
+  > Reference to the user who performed the edit. {@link
+  > discussion_board_users.id}
+- `title`: Snapshot of post title at the time of edit.
+- `body`: Snapshot of the post body at the time of edit.
+- `edited_at`: Timestamp when this edit was made.
 
 ### `discussion_board_comments`
 
-Comment Entity - This implements the persistent storage of all user-submitted comments in discussions, derived principally from the Posting and Commenting, Reporting, and Moderation requirements. Enables business: Members (authenticated users) can add comments to posts or threads, drive participation, and trigger moderation/reporting workflows. Maintains 3NF compliance by storing only basic comment data here, with version history and attachments managed by related tables. For example, a member posts a reply under a thread; this comment is stored here, and all edits spawn version records in discussion_board_comment_versions. Key relationships: References creator/member, post/thread, and version history. Special behaviors: Enforces logical deletion (soft delete), role-based permissions, and audit trails via related domain tables.
+Comments are user responses to posts or, recursively, to other comments
+(nested up to 5 levels). Each comment belongs to a post and may
+optionally have a parent comment. Comments are independently manageable
+with full edit and moderation support. Soft deletion is required for
+auditability.
 
 Properties as follows:
 
-- `id`: Primary Key. Unique identifier for this comment entity instance, required for versioning, audit, and referencing from attachments, reports, or moderation actions.
-- `discussion_board_member_id`: Belonged member's [discussion_board_members.id](#discussion_board_members) Identifies the member who created the comment. This links each comment to a registered member in the Actors domain. Ensures only authenticated users can create comments. For example, when 'JaneDoe' comments on a thread, discussion_board_member_id references her unique member id.
-- `discussion_board_post_id`: Target post's [discussion_board_posts.id](#discussion_board_posts) Associates comment with its parent post. Maintains comment thread context. For example, when commenting on a specific post in a topic, this points to the post id.
-- `content`: Current visible content of the comment - Implements base comment storage per Posting and Commenting requirements. Contains the editable text body at its most recent version. Ensures normalization by separating version history. For example, shows the latest text for all viewing users. Prohibited from containing calculation or aggregation data. Constraints: non-empty, max length per business rule.
-- `is_deleted`: Soft delete flag - Supports moderation requirements and audit regulation. Indicates whether the comment is logically deleted (hidden but not physically removed). Preserves normalization; logical deletions marked here while historical data and audit remain intact. For example, when a comment is removed for moderation, it is flagged true here but retained for review purposes.
-- `created_at`: Timestamp when the comment was created - Fulfills audit trail, reporting, and workflow timing requirements. Captures creation date and time for version order and temporal queries. For example, used in sorting threads by newest activity. Non-nullable, set at insert; not updatable.
-- `updated_at`: Timestamp for most recent update - Implements last-change tracking per Posting/Moderation requirements. Records when this comment was last edited (directly, not via version). Distinct from versioning. For example, indicates if and when a comment was updated. Non-nullable; system-managed.
+- `id`: Primary Key.
+- `post_id`
+  > Parent post [discussion_board_posts.id](#discussion_board_posts) to which this comment
+  > belongs.
+- `parent_id`
+  > Direct parent comment [discussion_board_comments.id](#discussion_board_comments) for nested
+  > commenting (nullable for top-level comments).
+- `created_by_id`: Author's [discussion_board_users.id](#discussion_board_users) for this comment.
+- `body`: Text content of the comment.
+- `nesting_level`: Level of nesting for this comment (max 5; 0 = top-level).
+- `created_at`: Timestamp when comment was created.
+- `updated_at`: Timestamp when comment was last updated.
+- `deleted_at`
+  > Soft delete timestamp (hidden from public but retained for
+  > moderation/audit).
 
-### `discussion_board_comment_versions`
+### `discussion_board_comment_edit_histories`
 
-Comment Version Entity - Implements comment versioning as mandated by audit, edit history, and moderation transparency requirements. Business purpose: Captures every revision of a comment, supporting features like rollback, moderator review, or version diff display. Maintains 3NF by isolating mutable historic data from the main comments table. For example, if a member edits a comment three times, each version is preserved here for audit and possible reversion. Key relationships: Each record links to its parent comment and the editing member. Special constraints: Must maintain strict sequential ordering, cannot be orphaned.
-
-Properties as follows:
-
-- `id`: Primary Key. Distinct identifier for this version entity. Guarantees auditibility and reference from moderation or analytics tables.
-- `discussion_board_comment_id`: Parent comment's [discussion_board_comments.id](#discussion_board_comments) Defines which logical comment this version belongs to. Maintains strict referential integrity – cannot exist unless parent exists. Example: all edits to Comment A reference its id.
-- `editor_member_id`: Editing member's [discussion_board_members.id](#discussion_board_members) Records who performed this edit (original author or admin/moderator on behalf). Supports moderation requirements and rollback logic. For example, if a post is edited by moderator, reference shows the responsible party.
-- `content`: Full content snapshot for this version - Implements versioning per Editing/Audit requirements. Holds exact comment text at time of this revision. Maintains normalization by never storing aggregated history or derived summaries. For example, supports diff view between versions. Constraints: non-nullable, limited to max allowed text size.
-- `created_at`: Timestamp for when the version was created - Satisfies audit and sequencing needs. Critical for ordering comment versions and reconstructing edit history. Non-nullable; fixed at version creation. System-managed; not modifiable after insertion.
-
-### `discussion_board_comment_attachments`
-
-Comment Attachment Entity - Implements comment file/media upload and management in line with Posting and Commenting functional requirements and audit expectations. Business purpose: Enables the association of external files (e.g., images, documents) with user comments. Maintains normalization by separating binary/meta file data from core comment or version entities. For example, a user attaches a PNG file when commenting – info here links the file and describes its purpose/type. Key relationships: References parent comment and the uploading member. May link to moderation, abuse workflows. Behavior notes: Attachment deletion upon comment removal is logical, not physical, until moderation review completes.
+Edit history (snapshot) table for comments. Records all previous versions
+of a comment for audit/audit-log compliance. Each record links to the
+original comment and editor. Append-only by design.
 
 Properties as follows:
 
-- `id`: Primary Key. Unique identifier for each comment attachment; referenced from comment or moderation action records.
-- `discussion_board_comment_id`: Parent comment's [discussion_board_comments.id](#discussion_board_comments) Links the attachment to the specific comment it accompanies. Preserves referential integrity, cascade deletes if comment is deleted. For example, when removing a comment, related attachments are flagged for review or logical deletion.
-- `uploader_member_id`: Uploading member's [discussion_board_members.id](#discussion_board_members) Identifies which member uploaded this attachment, fulfilling moderation and reporting needs. For example, provides traceability in the event of abuse or copyright complaints.
-- `file_name`: Original filename as uploaded - Implements user experience and file management requirements. Captured to show download/display name. Normalized, atomic string, no file data or MIME-type here. Example: 'user-guide.pdf'.
-- `file_url`: URL or URI where file is stored - Implements file referencing and download logic. Contains the safe-accessible storage or CDN link for retrieval and scanning. For example: 'https://cdn.example.com/upload/abc1234.pdf'. Must be a valid URI. Completely normalized – no aggregate content, no calculations, no stored binaries.
-- `mime_type`: MIME type of attachment content - Implements compatibility and validation coverage. Stores attachment's content-type for serving/display and content policy enforcement. For example: 'image/png', 'application/pdf'. Required, non-nullable. Ensures only atomic media/meta data is present.
-- `uploaded_at`: Timestamp for file upload - Fulfills audit and tracking for moderation or download logs. Set immediately upon successful upload. Not modifiable, required. Used for reporting and analytics. Example: display upload date/time on comment view or for anti-abuse workflow.
+- `id`: Primary Key.
+- `comment_id`
+  > Target comment's [discussion_board_comments.id](#discussion_board_comments) to which the
+  > snapshot belongs.
+- `edited_by_id`: User who performed the comment edit. [discussion_board_users.id](#discussion_board_users)
+- `body`: Snapshot body at edit moment.
+- `edited_at`: Edit timestamp for this snapshot record.
+
+### `discussion_board_attachments`
+
+Attachments hold metadata for files or media uploaded to posts/comments.
+Each attachment references either a post or a comment, but not both at
+once. Files may include images, documents, or media. Managed through
+parent content. Soft deletion is applied for compliance and moderation
+needs.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `post_id`
+  > Associated post [discussion_board_posts.id](#discussion_board_posts); nullable in case
+  > attachment is for a comment instead.
+- `comment_id`
+  > Associated comment [discussion_board_comments.id](#discussion_board_comments); nullable if
+  > attached to a post instead.
+- `uploaded_by_id`: Uploader's [discussion_board_users.id](#discussion_board_users). User who added the file.
+- `file_name`: Original file name as uploaded by the user.
+- `file_url`: Permanent URL of the uploaded file or media for access.
+- `content_type`: MIME type of the file for validation and access control.
+- `size_bytes`: Size of the file in bytes.
+- `created_at`: Timestamp when the attachment was uploaded.
+- `deleted_at`: Soft deletion marker for compliance/moderation; nullable.
+
+## Voting
+
+```mermaid
+erDiagram
+"discussion_board_votes" {
+  String id PK
+  String discussion_board_user_id FK
+  String discussion_board_post_id FK "nullable"
+  String discussion_board_comment_id FK "nullable"
+  String vote_type
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_vote_histories" {
+  String id PK
+  String discussion_board_vote_id FK
+  String vote_type
+  DateTime changed_at
+  String operation
+}
+"discussion_board_polls" {
+  String id PK
+  String discussion_board_post_id FK,UK
+  String title
+  String description "nullable"
+  Boolean multi_choice
+  DateTime opened_at
+  DateTime closed_at "nullable"
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_poll_options" {
+  String id PK
+  String discussion_board_poll_id FK
+  String option_text
+  Int sequence
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_poll_votes" {
+  String id PK
+  String discussion_board_poll_id FK
+  String discussion_board_poll_option_id FK
+  String discussion_board_user_id FK
+  DateTime created_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_vote_histories" }o--|| "discussion_board_votes" : vote
+"discussion_board_poll_options" }o--|| "discussion_board_polls" : poll
+"discussion_board_poll_votes" }o--|| "discussion_board_polls" : poll
+"discussion_board_poll_votes" }o--|| "discussion_board_poll_options" : option
+```
+
+### `discussion_board_votes`
+
+Stores individual user votes (upvotes or downvotes) on posts and
+comments. Each vote is linked to an actor (user), a post or comment, and
+is independently managed for deduplication and analytics. Used for
+engagement, business logic, and permission enforcement. Related to {@link
+discussion_board_posts}, [discussion_board_comments](#discussion_board_comments), {@link
+discussion_board_users}.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `discussion_board_user_id`
+  > Voter's [discussion_board_users.id](#discussion_board_users). Indicates the user who
+  > performed this vote.
+- `discussion_board_post_id`
+  > Voted post's [discussion_board_posts.id](#discussion_board_posts). Nullable if vote is on a
+  > comment.
+- `discussion_board_comment_id`
+  > Voted comment's [discussion_board_comments.id](#discussion_board_comments). Nullable if vote is
+  > on a post.
+- `vote_type`
+  > Indicates whether the vote is +1 (upvote) or -1 (downvote). Only accept
+  > 'up' or 'down'.
+- `created_at`: Vote creation timestamp.
+- `updated_at`: Vote last update timestamp.
+- `deleted_at`: Vote soft-delete timestamp; null if active.
+
+### `discussion_board_vote_histories`
+
+Captures a full, append-only audit trail of all vote state changes
+(creation, update, delete). Each record points to its corresponding vote
+and records the historical data for compliance and analytics. Used for
+audit, restoration, and compliance investigation workflows. Related to
+[discussion_board_votes](#discussion_board_votes).
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `discussion_board_vote_id`
+  > Tracked vote [discussion_board_votes.id](#discussion_board_votes). Links the history record
+  > to the current or former vote.
+- `vote_type`: Historical vote value in this change record ('up' or 'down').
+- `changed_at`: Timestamp of state change (created/updated/deleted).
+- `operation`: Indicates change type: 'create', 'update', or 'delete'.
+
+### `discussion_board_polls`
+
+Poll metadata attached to posts or threads. Used to allow users to vote
+in single- or multiple-choice poll scenarios. Stores poll attributes and
+lifecycle. Related to [discussion_board_posts](#discussion_board_posts), {@link
+discussion_board_poll_options}, [discussion_board_poll_votes](#discussion_board_poll_votes).
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `discussion_board_post_id`
+  > The post to which this poll is attached {@link
+  > discussion_board_posts.id}. Each poll is linked to a post.
+- `title`: Poll title or question visible to users.
+- `description`: Optional poll description.
+- `multi_choice`: True if poll allows multiple option selections per voter.
+- `opened_at`: Poll open time (can start accepting votes).
+- `closed_at`: Poll closing time (null if open-ended).
+- `created_at`: Poll creation timestamp.
+- `updated_at`: Last modification time.
+- `deleted_at`: Poll soft-delete marker (null if active).
+
+### `discussion_board_poll_options`
+
+Options/choices available to voters within a given poll. These are
+subsidiary to polls and only manageable via the parent poll. Required for
+selection and validation. Related to [discussion_board_polls](#discussion_board_polls).
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `discussion_board_poll_id`
+  > Parent poll [discussion_board_polls.id](#discussion_board_polls). The poll this option
+  > belongs to.
+- `option_text`: Text shown to users as an option/answer.
+- `sequence`: Display order for poll options (1-based).
+- `created_at`: Poll option creation time.
+- `updated_at`: Last updated time for this option.
+- `deleted_at`: Poll option soft-delete marker.
+
+### `discussion_board_poll_votes`
+
+Links user selections in polls to options, enabling many-to-many
+relationships. Each record indicates a single user's choice for a poll
+option. Ensures only valid and allowed selections are recorded. Used for
+poll result counting. Related to [discussion_board_poll_options](#discussion_board_poll_options),
+[discussion_board_polls](#discussion_board_polls), [discussion_board_users](#discussion_board_users).
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `discussion_board_poll_id`: Poll being answered [discussion_board_polls.id](#discussion_board_polls).
+- `discussion_board_poll_option_id`: Selected option [discussion_board_poll_options.id](#discussion_board_poll_options).
+- `discussion_board_user_id`: User who voted [discussion_board_users.id](#discussion_board_users).
+- `created_at`: Vote cast time.
+- `deleted_at`: Vote soft-delete marker.
 
 ## Moderation
 
 ```mermaid
 erDiagram
-"discussion_board_reports" {
+"discussion_board_flag_reports" {
   String id PK
   String reporter_id FK
-  String reported_post_id FK "nullable"
-  String reported_comment_id FK "nullable"
-  String content_type
+  String post_id FK "nullable"
+  String comment_id FK "nullable"
   String reason
+  String details "nullable"
   String status
+  DateTime reviewed_at "nullable"
   DateTime created_at
-  DateTime resolved_at "nullable"
+  DateTime updated_at
+  DateTime deleted_at "nullable"
 }
 "discussion_board_moderation_actions" {
   String id PK
-  String actor_moderator_id FK "nullable"
-  String actor_admin_id FK "nullable"
+  String moderator_id FK
+  String user_id FK "nullable"
   String post_id FK "nullable"
   String comment_id FK "nullable"
-  String report_id FK "nullable"
   String action_type
-  String action_details "nullable"
+  String action_reason
+  String details "nullable"
+  DateTime effective_from
+  DateTime effective_until "nullable"
   DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
 }
-"discussion_board_content_flags" {
+"discussion_board_moderation_audit_logs" {
   String id PK
-  String post_id FK "nullable"
-  String comment_id FK "nullable"
-  String flagged_by_moderator_id FK "nullable"
-  String flagged_by_admin_id FK "nullable"
-  String flag_type
-  String flag_source
-  String flag_details "nullable"
+  String moderation_action_id FK
+  String actor_id
+  String audit_type
+  String state_json
+  String description "nullable"
   DateTime created_at
-  DateTime cleared_at "nullable"
 }
-"discussion_board_moderation_actions" }o--o| "discussion_board_reports" : fk_action_report
+"discussion_board_appeals" {
+  String id PK
+  String appellant_id FK
+  String moderation_action_id FK "nullable"
+  String flag_report_id FK "nullable"
+  String appeal_reason
+  String status
+  String resolution_comment "nullable"
+  DateTime resolved_at "nullable"
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_escalation_logs" {
+  String id PK
+  String appeal_id FK
+  String moderation_action_id FK "nullable"
+  String escalation_level
+  String event
+  String description "nullable"
+  DateTime created_at
+}
+"discussion_board_moderation_audit_logs" }o--|| "discussion_board_moderation_actions" : moderationAction
+"discussion_board_appeals" }o--o| "discussion_board_moderation_actions" : moderationAction
+"discussion_board_appeals" }o--o| "discussion_board_flag_reports" : flagReport
+"discussion_board_escalation_logs" }o--|| "discussion_board_appeals" : appeal
+"discussion_board_escalation_logs" }o--o| "discussion_board_moderation_actions" : moderationAction
 ```
 
-### `discussion_board_reports`
+### `discussion_board_flag_reports`
 
-Reports of inappropriate or abusive content - Tracks user reports of posts or comments that may violate guidelines. Maintains strict 3NF by separating each report as an atomic record. Polymorphic reference resolved by two nullable foreign keys: one for post and one for comment.
+Contains all user and system-generated content flag reports, representing
+instance of objection or report on posts or comments for moderator queue.
+Supports independent flag actions and cross-content search for moderation
+workflows. Related entities: moderation actions and appeals. Stance:
+"primary" because each report may be managed, investigated, or triaged
+independently, regardless of content parent.
 
 Properties as follows:
 
-- `id`: Primary Key. Unique identifier for each report instance.
-- `reporter_id`: Reporter user's [discussion_board_members.id](#discussion_board_members). Identifies who made the report. Ensures normalized reference to member entity.
-- `reported_post_id`: The ID of the discussion_board_posts being reported. Null unless content_type is 'post'.
-- `reported_comment_id`: The ID of the discussion_board_comments being reported. Null unless content_type is 'comment'.
-- `content_type`: Indicates what type of content is being reported, e.g., 'post' or 'comment'.
-- `reason`: Explanation/reason for reporting content. Implements the user-provided reason requirement.
-- `status`: Current moderation status of the report (e.g., 'pending', 'reviewed', 'resolved').
-- `created_at`: Timestamp when report was created.
-- `resolved_at`: Timestamp when report was resolved (null if unresolved).
+- `id`: Primary Key.
+- `reporter_id`
+  > Reporting user's [discussion_board_users.id](#discussion_board_users). References the user
+  > who flagged content.
+- `post_id`
+  > Flagged post's [discussion_board_posts.id](#discussion_board_posts). Nullable if the report
+  > is on a comment.
+- `comment_id`
+  > Flagged comment's [discussion_board_comments.id](#discussion_board_comments). Nullable if the
+  > report refers to a post.
+- `reason`
+  > User-provided or system reason (category) for flagging the content, e.g.
+  > 'abuse', 'spam', 'misinformation'.
+- `details`: Optional extended textual justification for the report.
+- `status`
+  > Current review status for the report ('pending', 'triaged', 'dismissed',
+  > 'accepted', 'escalated').
+- `reviewed_at`
+  > The timestamp when the report was reviewed by a moderator; null if not
+  > yet reviewed.
+- `created_at`: Time when the flag report was submitted.
+- `updated_at`: Last time the report record was updated (e.g. status changes, triage).
+- `deleted_at`: Soft-delete timestamp. Null if active.
 
 ### `discussion_board_moderation_actions`
 
-Actions taken by moderators or admins regarding content moderation - Each moderation action references either a moderator or an admin (never both); action may target a post or a comment, resolved via separate nullable foreign keys.
+Represents all actionable decisions performed by human moderators or
+automated systems, including those on posts, comments, users, or IPs.
+Stores the action type, moderator reference, context, reason, and effect.
+Enables independent audit across parent contexts and supports historical
+review.
 
 Properties as follows:
 
-- `id`: Primary Key. Unique identifier for each moderation action event.
-- `actor_moderator_id`: Moderator user's [discussion_board_moderators.id](#discussion_board_moderators). Null unless a moderator acted.
-- `actor_admin_id`: Admin user's [discussion_board_admins.id](#discussion_board_admins). Null unless an admin acted.
-- `post_id`: The ID of the discussion_board_posts being moderated. Null unless the action targets a post.
-- `comment_id`: The ID of the discussion_board_comments being moderated. Null unless the action targets a comment.
-- `report_id`: If action relates directly to a report, this field links to the discussion_board_reports entry. Nullable for stand-alone moderation.
-- `action_type`: Describes the moderation action performed (e.g., 'delete', 'edit', 'warn', 'ban').
-- `action_details`: Additional details (eg, reason, notes, evidence).
-- `created_at`: Timestamp when moderation action was performed.
+- `id`: Primary Key.
+- `moderator_id`: Responsible moderator's [discussion_board_moderators.id](#discussion_board_moderators).
+- `user_id`
+  > Affected user's [discussion_board_users.id](#discussion_board_users). Null unless moderation
+  > action targets a user directly (e.g., warning, suspension).
+- `post_id`
+  > Moderated post's [discussion_board_posts.id](#discussion_board_posts). Null unless this
+  > action is for a post.
+- `comment_id`
+  > Moderated comment's [discussion_board_comments.id](#discussion_board_comments). Null unless
+  > this action is for a comment.
+- `action_type`
+  > Enumeration: kind of moderation ('warn', 'mute', 'remove', 'edit',
+  > 'restrict', 'restore', 'escalate').
+- `action_reason`
+  > Human- or system-written reason for moderator action, for compliance
+  > traceability.
+- `details`: Long-form description or notes about the moderation action.
+- `effective_from`: When the moderation action took effect.
+- `effective_until`
+  > When the moderation action concludes (for temporary
+  > restrictions/warnings), null if not time-bound.
+- `created_at`: Timestamp when the moderation action was taken.
+- `updated_at`: Timestamp of last update to the moderation action record.
+- `deleted_at`: Soft-delete timestamp; null if active.
 
-### `discussion_board_content_flags`
+### `discussion_board_moderation_audit_logs`
 
-Flags attached to posts or comments for moderation - Polymorphic reference is two separate nullable FKs (post and comment). Flagged by a moderator, admin, or system; these are represented by two nullable FKs for human actors.
+Historical record (append-only snapshot) of all moderation, triage, and
+review actions for compliance, reporting, and forensic analysis. Each
+record is timestamped and stores the full state for audit trail
+integrity. Rarely directly manipulated—serves audit and investigation.
 
 Properties as follows:
 
-- `id`: Primary Key. Unique identifier for each content flag instance.
-- `post_id`: ID of post being flagged. Nullable; set if flag is on a post.
-- `comment_id`: ID of comment being flagged. Nullable; set if flag is on a comment.
-- `flagged_by_moderator_id`: Moderator user's [discussion_board_moderators.id](#discussion_board_moderators). Nullable.
-- `flagged_by_admin_id`: Admin user's [discussion_board_admins.id](#discussion_board_admins). Nullable.
-- `flag_type`: Nature of flag (e.g., 'spam', 'abuse', 'automation', 'duplicate').
-- `flag_source`: Source/origin of flag, e.g. 'manual', 'automation', 'external'.
-- `flag_details`: Additional notes about why flag was set (free form, optional).
-- `created_at`: Timestamp when flag was created. Implements audit trace per EARS specs.
-- `cleared_at`: Timestamp when flag was cleared/resolved (null if still active).
+- `id`: Primary Key.
+- `moderation_action_id`
+  > Related moderation action's {@link
+  > discussion_board_moderation_actions.id}.
+- `actor_id`
+  > Person (or system) responsible for the action, references moderator,
+  > admin, or automated user. Redundant for historical snapshot integrity.
+- `audit_type`
+  > Kind of audit event ('action_taken', 'escalated', 'reverted',
+  > 'appeal_handled', 'policy_update').
+- `state_json`
+  > Full JSON snapshot of the moderation or flag report state after this
+  > event.
+- `description`
+  > Narrative (English) describing the event for future compliance/audit
+  > review.
+- `created_at`: Timestamp when the audit log was created (event occurred).
+
+### `discussion_board_appeals`
+
+Represents end-user or affected entity appeals against
+moderation/flag/report actions. Enables users to formally request review,
+reversal, or clarification of specific moderation events. Managed as
+independent first-class entities and supports multiple appeals per
+incident or actor. Stance: 'primary' due to independent API endpoints and
+review processes.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `appellant_id`
+  > Appealing user's [discussion_board_users.id](#discussion_board_users). May reference a
+  > moderator or admin in rare cases.
+- `moderation_action_id`
+  > Related moderation action's {@link
+  > discussion_board_moderation_actions.id}. Null if appeal relates to a flag
+  > report rather than a prior action.
+- `flag_report_id`
+  > Related flag report's [discussion_board_flag_reports.id](#discussion_board_flag_reports). Null
+  > unless appeal targets a moderation action on a flag, not a content
+  > moderation event.
+- `appeal_reason`: User-provided narrative and justification for the appeal.
+- `status`
+  > Appeal lifecycle status: ('pending', 'reviewed', 'resolved', 'denied',
+  > 'escalated').
+- `resolution_comment`
+  > Moderator/admin comment or justification for granting/denying the appeal,
+  > if applicable.
+- `resolved_at`: Timestamp of final resolution. Null if still active or under review.
+- `created_at`: Timestamp when the appeal was initially filed.
+- `updated_at`: Last updated timestamp for the appeal.
+- `deleted_at`: Soft-delete timestamp. Null if active.
+
+### `discussion_board_escalation_logs`
+
+Workflow subsidiary: records detailed logs of escalation events,
+including chain-of-command handover, reason, target, and final outcomes.
+Always tied to foundational moderation or appeal entities—never as
+independent records. Supports internal reporting, audit, and escalated
+workflow trace. Managed through parent entities only.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `appeal_id`: Reference to the related [discussion_board_appeals.id](#discussion_board_appeals).
+- `moderation_action_id`
+  > Reference to related [discussion_board_moderation_actions.id](#discussion_board_moderation_actions) —
+  > escalation of a specific moderation action.
+- `escalation_level`
+  > Level/stage (e.g., 'soft_review', 'team_review', 'legal_review',
+  > 'admin_review').
+- `event`: Short name ('escalated', 'delegated', 'finalized', 'withdrawn').
+- `description`: Human-readable details for internal reporting.
+- `created_at`: Timestamp of escalation log record.
 
 ## Notifications
 
 ```mermaid
 erDiagram
-"discussion_board_subscriptions" {
-  String id PK
-  String subscriber_id FK
-  String target_type
-  String target_id
-  DateTime subscribed_at
-  String notification_method
-  Boolean is_active
-}
 "discussion_board_notifications" {
   String id PK
-  String recipient_id FK
-  String subscription_id FK "nullable"
-  String notification_type
-  String target_type
-  String target_id
-  String message
-  DateTime delivered_at
-  DateTime read_at "nullable"
-  String delivery_status
+  String recipient_user_id FK
+  String actor_user_id FK "nullable"
+  String post_id FK "nullable"
+  String comment_id FK "nullable"
+  String type
+  String status
+  String title "nullable"
+  String body "nullable"
+  String(80000) action_url "nullable"
   String failure_reason "nullable"
+  DateTime created_at
+  DateTime delivered_at "nullable"
+  DateTime read_at "nullable"
+  DateTime deleted_at "nullable"
 }
-"discussion_board_notifications" }o--o| "discussion_board_subscriptions" : fk_discussion_board_notifications_subscription
+"discussion_board_notification_preferences" {
+  String id PK
+  String user_id FK,UK
+  Boolean email_enabled
+  Boolean push_enabled
+  Boolean in_app_enabled
+  String frequency
+  String categories
+  DateTime mute_until "nullable"
+  DateTime created_at
+  DateTime updated_at
+}
+"discussion_board_notification_subscriptions" {
+  String id PK
+  String user_id FK
+  String subscription_target_type
+  String subscription_target_id
+  DateTime created_at
+  DateTime deleted_at "nullable"
+}
 ```
-
-### `discussion_board_subscriptions`
-
-Discussion board subscription management - This implements the requirements for user subscriptions to topics or threads, as stated in 'Notification and Subscription' and 'Workflow Summary' in the requirements document. 
-
-Business purpose: Allows users (members) to subscribe to specific topics or threads to receive notifications about new posts, comments, or updates. This facilitates personalized engagement and information delivery. 
-
-Normalization: This table is fully normalized (3NF), with references only to users and content being tracked (topics/threads). All event/counter data is derived elsewhere and NOT stored here. For example, a member subscribes to a thread and chooses to receive email notifications for new comments. 
-
-Key relationships: Connects to user/member accounts and references content entities like topics or threads through polymorphic association. 
-Special behaviors: One user may have multiple subscriptions (to different threads or topics); uniqueness is typically enforced per (user, target_type, target_id) tuple.
-
-Properties as follows:
-
-- `id`: Primary Key. Unique identifier for each subscription record.
-- `subscriber_id`: Subscribed user's [discussion_board_members.id](#discussion_board_members) (or similar actor/user id from the actors module) - Links the subscription to the specific member who will receive notifications.
-- `target_type`: Type of subscribed entity (e.g., 'topic', 'thread'). Implements the polymorphic requirement allowing users to subscribe to both topics and threads as described in features. Ensures normalization by not duplicating data between entity types. For example, value may be 'topic' or 'thread'.
-- `target_id`: Identifier for the target entity the subscription belongs to (may refer to either a topic or thread depending on target_type). This allows polymorphic associations without denormalization. For example, the UUID of the thread or topic being followed.
-- `subscribed_at`: Timestamp when the subscription was created. Implements audit and tracking requirement. Ensures atomicity of event recording. For example, when the user first clicks 'subscribe' on a discussion.
-- `notification_method`: Preferred notification delivery method for this subscription (e.g., 'email', 'in-app'). Implements flexible business logic for user notification preferences. Complies with normalization as all methods remain atomic here. For example, a member may choose 'email' for some threads but 'in-app' for others.
-- `is_active`: Whether the subscription is currently active. Implements toggling or pause of notifications per subscription, as required for user experience. Ensures no derived or pre-calculated values. For example, users may mute certain subscriptions by setting this to false.
 
 ### `discussion_board_notifications`
 
-Notification delivery and tracking for the discussion board - Implements requirements from the 'Notification and Subscription' and related workflow/acceptance criteria, supporting delivery and audit of in-app and external notifications.
-
-Business purpose: Tracks each notification event sent to a user, related to activity on a subscribed topic/thread or board event. Enables notification rendering, read/unread status, preference handling, and delivery outcomes. 
-
-Normalization: Table is normalized (3NF) by separating notification content, recipient, and status; no denormalized aggregates present. For example, a member gets notified of a reply to a subscribed thread, and the read status is managed here. 
-
-Key Relationships: References a recipient member, may reference the subscription (optional), and stores only atomic notification delivery details. 
-Special behaviors: Read/unread logic, delivery status, and failure reasons may be updated; past notification events are retained for audit.
+Notification delivery instances: Each record represents a discrete
+notification, either user-facing or system-triggered, intended for a
+specific recipient. Supports associations with sending actor, linked
+post/comment (if reference exists), notification type, status
+(unread/read/delivered), and failure/audit fields. User can independently
+mark as read/archived. Related to [discussion_board_users](#discussion_board_users),
+potentially to posts/comments via foreign keys. Business logic
+distinguishes among notification types (reply, mention, moderator action,
+system alert, etc.).
 
 Properties as follows:
 
-- `id`: Primary Key. Unique identifier for each notification.
-- `recipient_id`: Recipient user's [discussion_board_members.id](#discussion_board_members) (or similar actor/user id from actors module). Links the notification event to a specific member account.
-- `subscription_id`: (Optional) Reference to the [discussion_board_subscriptions.id](#discussion_board_subscriptions) for the relevant subscription (if the notification was triggered by a subscription). Null when notification arises independently of a user's explicit subscription.
-- `notification_type`: Type/category of notification (e.g., 'new_post', 'reply', 'mention', 'system'). Implements requirement for multi-purpose notifications in features/workflow. Ensures atomicity and supports rendering. For example, 'reply' for a reply to a user's comment.
-- `target_type`: Type of the entity the notification is about (e.g., 'topic', 'thread', 'post', etc.). Implements generalization of event sources in notifications. Ensures normalized mapping for polymorphic references. For example, value may be 'thread' or 'topic'.
-- `target_id`: Identifier of the target entity (thread, topic, post, etc.) that this notification concerns. Implements polymorphic association as per requirements analysis. Ensures each notification event is atomic. For example, the UUID of the reply post discussed in notification.
-- `message`: Notification message content to show the user (in-app or as short text/email). Implements audit and notification requirements by recording the actual notification content. Atomic and not pre-rendered; for example, 'You have a new reply in Thread X.'
-- `delivered_at`: Timestamp when the notification was sent/delivered to the user. Implements delivery tracking and audit requirement. Compliant with normalization (not pre-aggregated). For example, when an email or in-app event is triggered.
-- `read_at`: Timestamp when the notification was read/opened by the user. Optional (null if unread). Implements read/unread features and audit trail. For example, when the user first clicks on the notification.
-- `delivery_status`: Status of the notification delivery (e.g., 'delivered', 'failed', 'pending'). Implements feedback loop and business requirement for retry or diagnostics. For example, 'failed' if the user's email bounced.
-- `failure_reason`: Optional reason for failure if delivery_status is 'failed'. Implements troubleshooting and analytics requirements - always nullable. For example, 'invalid email address' or 'unsubscribed'.
+- `id`: Primary Key.
+- `recipient_user_id`
+  > Target recipient's [discussion_board_users.id](#discussion_board_users). User who receives
+  > the notification.
+- `actor_user_id`
+  > Optional actor that generated the notification. References {@link
+  > discussion_board_users.id}; null for system events.
+- `post_id`
+  > Linked post, if notification relates to a discussion post. References
+  > [discussion_board_posts.id](#discussion_board_posts). Nullable.
+- `comment_id`
+  > Linked comment, if notification relates to a post comment. References
+  > [discussion_board_comments.id](#discussion_board_comments). Nullable.
+- `type`
+  > Type of notification (e.g., reply, mention, flag, mod_action,
+  > system_alert, poll_close, etc.) - used to drive business and UI logic.
+- `status`
+  > Delivery/read status: one of 'unread', 'read', 'delivered', 'archived',
+  > 'failed'. Used to filter in notification center and trigger UX badges.
+- `title`
+  > Short notification title or summary (for display in notification center
+  > previews).
+- `body`
+  > Notification content/body, typically short and context-focused. HTML/text
+  > allowed per business policy.
+- `action_url`
+  > Link or URI for user action (e.g., "go to post", "view comment"). Null if
+  > system/informational only.
+- `failure_reason`
+  > Reason for delivery failure (if status is 'failed'). May contain
+  > business-level reason or error code. Null if delivered/successful.
+- `created_at`: Notification creation timestamp (when notification was generated).
+- `delivered_at`
+  > When notification was (attempted to be) delivered (e.g., pushed, sent,
+  > shown). Nullable if not delivered yet.
+- `read_at`
+  > When recipient read the notification (set by user interaction, system, or
+  > push). Null if not yet read.
+- `deleted_at`: Soft-deletion timestamp. Null if not (soft-)deleted.
 
-## Analytics
+### `discussion_board_notification_preferences`
+
+Per-user notification preference settings: Each record applies to a
+specific user and defines delivery channel choices (in-app, email, push),
+frequency, and opt-in/out preferences for each notification
+type/category. Managed independently by the user. Critical for respecting
+user contact permissions and compliance requirements.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `user_id`
+  > Notification preference owner's [discussion_board_users.id](#discussion_board_users).
+  > References the user this preference set belongs to.
+- `email_enabled`
+  > Whether the user enables email notifications for this category (true:
+  > allowed, false: suppressed).
+- `push_enabled`: Whether the user enables push notifications for this category.
+- `in_app_enabled`
+  > Whether the user enables in-app notifications for this category
+  > (notification center, banners, etc.).
+- `frequency`
+  > Notification delivery frequency: e.g., 'immediate', 'digest_daily',
+  > 'digest_weekly'. Directs scheduling for batch or real-time delivery.
+- `categories`
+  > CSV or JSON-encoded list of notification categories/types this preference
+  > applies to. (e.g., 'reply,mention,mod_action').
+- `mute_until`
+  > Suppress notifications for all categories until this datetime. Null if
+  > not muted.
+- `created_at`: Creation timestamp for this preference record.
+- `updated_at`: Last updated timestamp for this preferences record.
+
+### `discussion_board_notification_subscriptions`
+
+Represents persistent notification subscriptions: Each record describes a
+user following a topic, category, or post/thread
+(subscription_target_type/target_id). Enables delivery of notifications
+whenever the subscribed entity (category, thread, post, etc.) is updated
+or triggers an event. Users can manage these subscriptions independently,
+and unsubscribe at any time.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `user_id`
+  > Subscribing user's [discussion_board_users.id](#discussion_board_users). The user who
+  > follows or subscribes to event delivery.
+- `subscription_target_type`
+  > Type of entity being followed (e.g., 'post', 'thread', 'category', 'tag',
+  > 'user') for polymorphic delivery.
+- `subscription_target_id`
+  > Entity ID being followed/subscribed (FK to target entity, not enforced
+  > here due to polymorphism).
+- `created_at`: Timestamp when subscription was created.
+- `deleted_at`
+  > If present, marks a soft delete (unsubscribed). Still retained for
+  > compliance/audit.
+
+## Session
 
 ```mermaid
 erDiagram
-"discussion_board_activity_logs" {
+"discussion_board_jwt_tokens" {
   String id PK
-  String actor_id FK
-  String topic_id FK "nullable"
-  String thread_id FK "nullable"
-  String post_id FK "nullable"
-  String actor_type
-  String action_type
-  DateTime action_timestamp
-  String ip_address "nullable"
-  String user_agent "nullable"
-  String metadata_json "nullable"
+  String discussion_board_user_id FK
+  String token UK
+  DateTime issued_at
+  DateTime expires_at
+  DateTime revoked_at "nullable"
+  String device_info "nullable"
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_refresh_tokens" {
+  String id PK
+  String discussion_board_user_id FK
+  String refresh_token UK
+  DateTime issued_at
+  DateTime expires_at
+  DateTime revoked_at "nullable"
+  String device_info "nullable"
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_password_resets" {
+  String id PK
+  String discussion_board_user_id FK
+  String reset_token UK
+  DateTime expires_at
+  DateTime used_at "nullable"
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_verification_tokens" {
+  String id PK
+  String discussion_board_user_id FK
+  String verification_token UK
+  String purpose
+  DateTime expires_at
+  DateTime used_at "nullable"
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
 }
 ```
 
-### `discussion_board_activity_logs`
+### `discussion_board_jwt_tokens`
 
-Discussion Board Activity Log - This implements the tracking/audit trail requirement from the analytics and audit reporting sections. 
-
-Records every significant user or system action relevant for site analytics, moderation audit, and user engagement metrics. Maintains 3NF normalization by storing atomic events (each row is a single action: view, post, report, moderation action, etc), separating factual event data from analytics summaries. For example, when a member views a post or a moderator hides a comment, an entry is created here with all relevant metadata.
-
-Key relationships: references user/actor (from Actors domain), topic/thread/post (from Articles domain) when applicable.
-Special behaviors: immutable log (never update/delete except per retention policy); supports security, compliance, and analytics.
+Stores all active JWT access tokens for authenticated sessions. Each
+token links to a user and device/session metadata, and includes issued,
+expiration, and revocation timestamps for full audit traceability.
+Enables support for single-session, multi-device, and session revocation.
+References [discussion_board_users.id](#discussion_board_users). No authentication logic
+present here.
 
 Properties as follows:
 
-- `id`: Primary Key. Unique log entry identifier
-- `actor_id`: The actor's [discussion_board_members.id](#discussion_board_members), [discussion_board_moderators.id](#discussion_board_moderators), etc. Foreign key to user who performed the action - references the appropriate user/role table, depending on actor_type. Enables linking analytics to specific users or roles.
-- `topic_id`: The affected [discussion_board_topics.id](#discussion_board_topics): references the discussion topic if the activity relates to a whole topic. Nullable if the activity is not scoped to a topic.
-- `thread_id`: The affected [discussion_board_threads.id](#discussion_board_threads): references the thread if the activity is about a particular thread. Nullable if the activity is about the whole topic or other entity.
-- `post_id`: The affected [discussion_board_posts.id](#discussion_board_posts). Nullable if the activity is not directly about a post (could be a view, report, thread creation, etc).
-- `actor_type`: Role type of actor performing the action ("member", "moderator", "admin", "guest"). Implements requirement to distinguish actions by role for security and analytics reporting. Ensures normalization by storing as a flag/enumeration; for example: used to partition engagement heatmaps by user type.
-- `action_type`: Type of activity ("view_topic", "view_post", "post_created", "comment_created", "report_submitted", "moderation_action", etc). Implements the requirement to classify the kind of interaction for analytics/audit. Ensures normalization (atomic non-calculated field). Used when aggregating engagement stats.
-- `action_timestamp`: Timestamp when the activity occurred. Atomic, required field for temporal analytics and ordering. Implements requirements for audit logging and report building.
-- `ip_address`: IP address of the actor (if available). Implements legal compliance and security/audit requirements for analytics. Allows for location-based reporting and abuse detection. Ensures normalization by being a standalone attribute. Nullable if not collected (e.g. system action).
-- `user_agent`: User agent string of the request origin (browser/device details). Implements device analytics and troubleshooting. Separate atomic data for normalization. Nullable if not recorded (e.g. system job, API).
-- `metadata_json`: Extensible JSON metadata for activity-specific detail (e.g. moderation reason, previous/after details on edits, report evidence, etc). Implements the extensibility requirement from requirements analysis. Stays normalized by being a single atomic JSON dump, not denormalized fields. Allows platform extension without schema change.
+- `id`: Primary Key.
+- `discussion_board_user_id`
+  > Authenticated user's [discussion_board_users.id](#discussion_board_users) to whom the token
+  > was issued.
+- `token`: JWT access token string (opaque, signed/encoded).
+- `issued_at`: Datetime when token was generated, for audit trace and session tracking.
+- `expires_at`: Datetime when this token should expire and become invalid.
+- `revoked_at`: Datetime when this session/token was revoked (null if still valid).
+- `device_info`
+  > Optional device/session metadata (browser, OS, IP, or user agent as
+  > string).
+- `created_at`: Datetime when this record was created.
+- `updated_at`: Datetime when this record was last updated.
+- `deleted_at`: Soft-delete timestamp for audit compliance. Null if active.
 
-## default
+### `discussion_board_refresh_tokens`
+
+Tracks refresh tokens used for obtaining new access tokens in session
+management. Each token is linked to a user and supports revocation or
+expiry for device-specific logout flows. Only one active refresh token
+per device/session per user per audit and compliance rule. References
+[discussion_board_users.id](#discussion_board_users).
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `discussion_board_user_id`: Token owner's [discussion_board_users.id](#discussion_board_users).
+- `refresh_token`: Opaque token string for session refresh (secure random, not JWT).
+- `issued_at`: Datetime when refresh token was created for auditing lifecycle.
+- `expires_at`: Datetime this refresh token expires.
+- `revoked_at`
+  > Datetime when refresh token was revoked (manual or on logout). Null if
+  > active.
+- `device_info`
+  > Optional device/session metadata for context or audit (device/browser/IP
+  > info).
+- `created_at`: Datetime when this record was created.
+- `updated_at`: Datetime when this record was last updated.
+- `deleted_at`: Soft-delete timestamp. Null if active.
+
+### `discussion_board_password_resets`
+
+Supports password reset flows by tracking all issued reset tokens, their
+status, and their relationship to a user. Allows only single-use,
+time-limited tokens, enforced via expiry and one-time use flags. Each row
+is fully auditable for compliance. Links to {@link
+discussion_board_users.id}.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `discussion_board_user_id`
+  > Owner user requesting password reset; references {@link
+  > discussion_board_users.id}.
+- `reset_token`: Single-use password reset token string (secure, unique, non-repeating).
+- `expires_at`: Datetime when reset link or token expires and may not be reused.
+- `used_at`: Datetime when this token was actually used (null if not yet used).
+- `created_at`: Datetime when this record was created.
+- `updated_at`: Datetime when this record was last updated.
+- `deleted_at`: Soft-delete timestamp for audit compliance. Null if active.
+
+### `discussion_board_verification_tokens`
+
+Stores and tracks verification codes/tokens for email or other
+out-of-band verification events during registration and sensitive
+operations. Each token may be single-use or multi-purpose (e.g., sign-up
+email, MFA, email update), linked to a user for audit and reissuance
+tracking. Each has timing and usage audit state. Tied to {@link
+discussion_board_users.id}.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `discussion_board_user_id`
+  > Reference to the user for whom this verification event is tracked. {@link
+  > discussion_board_users.id}.
+- `verification_token`: Token string/code sent for registration/email verification/MFA.
+- `purpose`
+  > Purpose of this token (e.g. 'email_verification', 'password_reset',
+  > 'mfa').
+- `expires_at`: Datetime when verification event expires.
+- `used_at`: Datetime when code was used for verification, else null if unused.
+- `created_at`: Datetime when this record was created.
+- `updated_at`: Datetime when this record was last updated.
+- `deleted_at`: Soft-delete timestamp for audit. Null if not deleted.
+
+## Compliance
 
 ```mermaid
 erDiagram
-"discussion_board_engagement_stats" {
+"discussion_board_data_erasure_requests" {
   String id PK
-  String topic_id FK "nullable"
-  DateTime period_start
-  DateTime period_end
-  String dimension
-  String segment_value
-  Int post_count
-  Int comment_count
-  Int active_user_count
-  Int report_count
+  String discussion_board_user_id FK
+  String request_type
+  String status
+  DateTime submitted_at
+  DateTime processed_at "nullable"
+  String justification "nullable"
+  String regulator_reference "nullable"
+  String verifier "nullable"
+  DateTime verified_at "nullable"
+  String response_payload "nullable"
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_privacy_dashboards" {
+  String id PK
+  String discussion_board_user_id FK
+  DateTime access_requested_at
+  DateTime access_fulfilled_at "nullable"
+  String dashboard_payload
+  String(80000) export_file_uri "nullable"
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_compliance_events" {
+  String id PK
+  String initiated_by_user_id FK "nullable"
+  String event_type
+  String event_status
+  String event_details "nullable"
+  DateTime detected_at
+  DateTime resolved_at "nullable"
+  String regulatory_ticket "nullable"
+  String assigned_staff "nullable"
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
+}
+"discussion_board_export_logs" {
+  String id PK
+  String requested_by_user_id FK "nullable"
+  String target_type
+  String(80000) file_uri UK
+  String file_type
+  DateTime exported_at
+  String status
+  DateTime created_at
+  DateTime updated_at
+  DateTime deleted_at "nullable"
 }
 ```
 
-### `discussion_board_engagement_stats`
+### `discussion_board_data_erasure_requests`
 
-Discussion Board Engagement Stats - Implements the requirement for summarized analytics/statistical reporting to admins and moderators, as specified in the requirements under analytics and dashboards.
-
-Stores pre-calculated, periodically updated aggregate data for dashboard efficiency: e.g., daily/weekly/monthly active users, post/comment counts, report rates. Maintains normalization for atomic periods (scope is always a specific interval, such as day/week/month); each row is a summary for one period, dimension, and optional segment (e.g., by topic, role, etc).
-
-Key relationships: Segments relate to users by role/type, topics, or system-wide. Populated by background jobs. Usage example: Admin views stats dashboard; values come from here instead of slow full log scans.
-Special behaviors: must be marked material=true as it contains denormalized/pre-aggregated values.
+Records each user-initiated request for data erasure (GDPR/CCPA Right to
+be Forgotten). Tracks requestor, status, type, justification,
+verification, and regulator responses. Allows for compliance with
+required audit trail and deletion verification. Relates to {@link
+discussion_board_users}.
 
 Properties as follows:
 
-- `id`: Primary Key. Unique stat record identifier
-- `topic_id`: Segmented stat's [discussion_board_topics.id](#discussion_board_topics). Nullable when stats are aggregated across all topics or for site-wide metrics.
-- `period_start`: Start timestamp of the analysis period (e.g., beginning of day, week, etc). Normalized: atomic, not calculated. For example, 2025-07-29 00:00:00 for daily period.
-- `period_end`: End timestamp of the analysis period (inclusive/exclusive; as defined). Implements requirement for temporal analytics. Normalized: atomic field. For example, 2025-07-29 23:59:59 for daily aggregate.
-- `dimension`: Type of dimension for stats: e.g., "site", "topic", "role", "device_type". Implements requirement to segment analytics by various attributes; normalized and not calculated. Used e.g. to report active Moderators in a week.
-- `segment_value`: Value of the dimension segment (e.g., topic UUID string, "admin", "moderator", "member", "guest", "all"). May be a topic ID, a role name, etc. Implements requirement for multidimensional reporting; normalized as atomic segment. Example: reporting posts per role per day.
-- `post_count`: Summed total of posts in the segment and period. Denormalized, thus only in materialized view. Implements requirement for rapid dashboard reporting of volume metrics; e.g., total new posts sitewide per day.
-- `comment_count`: Summed total of comments created in this period/segment. Same requirements/context as post_count. Ensures denormalized aggregation is in the analytics-derived table, not original comments table.
-- `active_user_count`: Number of unique active users (by actor/role/dimension) in the current period segment. Implements requirement for retention/engagement dashboard values. Denormalized, so only here. Used for key stats such as DAU/WAU/MAU.
-- `report_count`: Count of abuse reports handled/raised for the segment in the period. Implements moderation workload analysis; denormalized for reporting. Used in analytics dashboard.
+- `id`: Primary Key.
+- `discussion_board_user_id`
+  > Belonged user's [discussion_board_users.id](#discussion_board_users). Foreign key for
+  > tracking which user's data is to be erased. Mandatory for audit and
+  > traceability.
+- `request_type`
+  > Type of erasure (full account, post-only, comment-only, partial, or
+  > specific legal request). Used for regulatory reporting.
+- `status`
+  > Current erasure process state (pending, processing, completed, rejected).
+  > Must be explicitly set for record integrity.
+- `submitted_at`: Timestamp when the erasure request was submitted.
+- `processed_at`: When the erasure request was fully processed, if applicable.
+- `justification`
+  > User-provided or legally required reason for data erasure. Supports
+  > compliance with regulatory requirements.
+- `regulator_reference`
+  > External regulatory agency reference or ticket if applicable (e.g. DPA
+  > reference number).
+- `verifier`
+  > Compliance staff or automated process validating the request. For audit
+  > tracking.
+- `verified_at`: When request was verified for eligibility. May be null if auto-approved.
+- `response_payload`
+  > Structured response content to the requester, used for compliance
+  > communication and documentation.
+- `created_at`: Timestamp when the record was created.
+- `updated_at`: Timestamp when the record was last updated.
+- `deleted_at`
+  > When the record was soft-deleted (may be null for active records). Soft
+  > delete required for audit compliance.
+
+### `discussion_board_privacy_dashboards`
+
+Aggregated privacy metrics, summaries, and user-facing data exports for
+compliance dashboards (GDPR/CCPA Art. 15/20, right to
+access/portability). Used to generate machine-readable exports, audit
+logs, and summary tables for regulatory response. Not for regular use,
+only on user request or regulatory demand.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `discussion_board_user_id`
+  > The user whose data this privacy dashboard summarizes. Belongs to {@link
+  > discussion_board_users.id}.
+- `access_requested_at`: When the user requested privacy data access/export.
+- `access_fulfilled_at`
+  > When data export was completed and made available. For regulatory
+  > deadlines.
+- `dashboard_payload`
+  > JSON-encoded or structured summary of user's privacy data, data sources,
+  > erasure history, etc. Used for export and compliance evidence.
+- `export_file_uri`
+  > URI link to generated download or export file for portability. May be
+  > null prior to file generation.
+- `created_at`: Timestamp when the dashboard record was created.
+- `updated_at`: Timestamp when dashboard was last updated or re-generated.
+- `deleted_at`: When the record was soft-deleted (may be null).
+
+### `discussion_board_compliance_events`
+
+Captures all compliance-triggered actions, incidents, investigation
+cases, regulatory requests (not business-as-usual logs). Used for
+recordkeeping, reporting to DPAs (Data Protection Authorities), and
+internal compliance audits. Not a general audit or syslog table.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `initiated_by_user_id`
+  > Optional: User who triggered the compliance event, if applicable (e.g.,
+  > making a legal or privacy request). Nullable, since not all events come
+  > from users.
+- `event_type`
+  > Nature of the compliance event (e.g., regulator_inquiry,
+  > data_breach_report, DPIA_completed, erasure_executed, legal_hold).
+- `event_status`
+  > Current status (open, closed, in_review, escalated, resolved), allowing
+  > distinct compliance tracking.
+- `event_details`
+  > Detailed event content, investigation summary, or protocol steps. Often
+  > used for audit export; supports full text search.
+- `detected_at`: When the compliance event started or was detected/received.
+- `resolved_at`: When event was closed or resolved, if finalized.
+- `regulatory_ticket`
+  > Regulator's case/ticket number or external ID, if available, for
+  > traceability.
+- `assigned_staff`
+  > Compliance staff member or system process handling the event. May be null
+  > if auto-processed or pending assignment.
+- `created_at`: Timestamp when this event record was created.
+- `updated_at`: Record last updated timestamp.
+- `deleted_at`: Soft-deleted timestamp (null when active).
+
+### `discussion_board_export_logs`
+
+Tracks all exports and downloads of compliance, audit, or user privacy
+data (for regulatory evidence). Includes target type (user, regulator,
+legal), file info, requester, and status for traceability. Provides
+evidence for meeting data export/portability requirements. Distinct from
+privacy dashboards as this logs every generated file event.
+
+Properties as follows:
+
+- `id`: Primary Key.
+- `requested_by_user_id`
+  > The user (or staff) requesting the export file. FK to {@link
+  > discussion_board_users.id}. Nullable to support external/automated
+  > exports.
+- `target_type`
+  > Export target: user, regulator, admin, legal, etc. Used to segment export
+  > type for audit.
+- `file_uri`: Download URI for the exported data/logs file.
+- `file_type`
+  > MIME type or descriptor of file (e.g. application/json, application/pdf,
+  > csv, xml, etc.).
+- `exported_at`: When export was generated.
+- `status`: Export status (pending, available, expired, failed).
+- `created_at`: Timestamp when the export log was created.
+- `updated_at`: Timestamp when this record was last updated.
+- `deleted_at`: Soft-deleted timestamp (null for active/log-retained).
