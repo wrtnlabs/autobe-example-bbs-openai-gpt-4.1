@@ -1,0 +1,160 @@
+/// Stores all comments in the discussion board, supporting nested replies
+/// via parent-child relationships. Each comment references the original
+/// post, its parent comment if a reply, and the authoring member. Business
+/// fields include content, status, edit and delete timestamps, and a lock
+/// flag for moderation or business rule enforcement. Full-text GIN index
+/// supports search. Core to discussion and moderation.
+///
+/// @namespace Comments
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_comments {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Belonged post's {@link discuss_board_posts.id}
+  discuss_board_post_id String
+  
+  /// Parent comment's {@link discuss_board_comments.id}, nullable for
+  /// top-level comments.
+  parent_id String?
+  
+  /// Authoring member's {@link discuss_board_members.id}
+  author_member_id String
+  
+  /// Content body of the comment. Min 2, max 2000 chars. Subject to moderation
+  /// and full-text search.
+  content String
+  
+  /// Indicates depth of the comment (number of ancestor chain from post root),
+  /// used for nesting enforcement. Business logic checks value up to max
+  /// thread depth.
+  depth Int
+  
+  /// Flag whether the comment is locked and cannot be edited/deleted,
+  /// typically due to expired edit window or moderation action.
+  is_locked Boolean
+  
+  /// Business status of the comment (e.g., 'active', 'under_review',
+  /// 'deleted'). Used for workflow enforcement and UI display.
+  status String
+  
+  /// UTC timestamp of comment creation.
+  created_at DateTime
+  
+  /// UTC timestamp of last update/modification.
+  updated_at DateTime
+  
+  /// Soft-delete timestamp; null if active, else marks deletion for audit and
+  /// regulatory purposes.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  post discuss_board_posts @relation(fields: [discuss_board_post_id], references: [id], onDelete: Cascade)
+  parent discuss_board_comments? @relation("recursive", fields: [parent_id], references: [id], onDelete: Cascade)
+  author discuss_board_members @relation(fields: [author_member_id], references: [id], onDelete: Cascade)
+  
+  recursive discuss_board_comments[] @relation("recursive")
+  discuss_board_comment_edit_histories discuss_board_comment_edit_histories[]
+  discuss_board_comment_deletion_logs discuss_board_comment_deletion_logs[]
+  discuss_board_comment_reactions discuss_board_comment_reactions[]
+  discuss_board_content_reports discuss_board_content_reports[]
+  discuss_board_moderation_actions discuss_board_moderation_actions[]
+  
+  @@index([discuss_board_post_id, created_at])
+  @@index([author_member_id, created_at])
+  @@index([parent_id])
+}
+
+/// Tracks all edits for comments. Each record links to its parent comment,
+/// the editing member, and stores the edit snapshot including previous
+/// content, status, and a UTC timestamp. Used for audit history, moderation,
+/// and rollback. Append-only. Never directly user-managed; subsidiary to
+/// comment.
+///
+/// @namespace Comments
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_comment_edit_histories {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Target comment's {@link discuss_board_comments.id}
+  discuss_board_comment_id String
+  
+  /// Editing member's {@link discuss_board_members.id}
+  editor_member_id String
+  
+  /// Content of the comment prior to the edit. For audit/history/reversion.
+  /// Max 2000 chars.
+  previous_content String
+  
+  /// Value of business status field prior to edit (e.g., 'active',
+  /// 'under_review', 'deleted').
+  previous_status String
+  
+  /// Optional note from editor indicating reason for edit, user-visible in
+  /// audit/history. Max 200 chars.
+  editor_note String?
+  
+  /// UTC timestamp of this edit event (when snapshot was recorded).
+  created_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  comment discuss_board_comments @relation(fields: [discuss_board_comment_id], references: [id], onDelete: Cascade)
+  editor discuss_board_members @relation(fields: [editor_member_id], references: [id], onDelete: Cascade)
+  
+  @@index([discuss_board_comment_id, created_at], map: "discuss_board_comment_edit_histories_discuss_board_com_a843af3a")
+  @@index([editor_member_id, created_at], map: "discuss_board_comment_edit_histories_editor_member_id__6b118eaa")
+}
+
+/// Stores every deletion event for comments, including soft-deletes and hard
+/// deletes. References comment, the deleting actor (who may be author,
+/// moderator, or admin), records deletion reason for compliance and appeals,
+/// and UTC deletion timestamp. Never managed directly by users; subsidiary
+/// log for transparency and audit.
+///
+/// @namespace Comments
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_comment_deletion_logs {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Target comment's {@link discuss_board_comments.id}
+  discuss_board_comment_id String
+  
+  /// Deleting actor's user account {@link discuss_board_user_accounts.id} (can
+  /// be author, moderator, or admin) to support all escalation cases.
+  actor_user_account_id String
+  
+  /// Enumerates reason for deletion (e.g., 'self_delete',
+  /// 'moderation_violation', 'admin_enforcement'). Required for audit.
+  deletion_reason String
+  
+  /// Optional note by deleting actor for audit or appeals.
+  actor_note String?
+  
+  /// UTC timestamp of when deletion occurred. May differ from content's
+  /// deleted_at for delayed cases.
+  deleted_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  comment discuss_board_comments @relation(fields: [discuss_board_comment_id], references: [id], onDelete: Cascade)
+  actor discuss_board_user_accounts @relation(fields: [actor_user_account_id], references: [id], onDelete: Cascade)
+  
+  @@index([discuss_board_comment_id, deleted_at], map: "discuss_board_comment_deletion_logs_discuss_board_comm_7d1f6339")
+  @@index([actor_user_account_id, deleted_at], map: "discuss_board_comment_deletion_logs_actor_user_account_2f0486ec")
+}

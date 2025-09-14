@@ -1,0 +1,297 @@
+/// Records reports of posts or comments for moderation review. Each record
+/// tracks the reporting user, reported content (post or comment), type of
+/// content, report reason, status, and workflow timestamps. Used by
+/// moderators and administrators to triage, review, and resolve complaints
+/// submitted by members. References actors in user-related tables, and
+/// content in posts/comments. Enables searching all reports, viewing by
+/// content, user, or resolution status. Essential for strict audit trails
+/// and abuse prevention. Supports one-to-many relationships with moderation
+/// actions (an action may resolve multiple reports).
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_content_reports {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Reporting user's {@link discuss_board_members.id}. References the member
+  /// who submitted the report.
+  reporter_member_id String
+  
+  /// Reported post's {@link discuss_board_posts.id}. Exactly one of
+  /// content_post_id or content_comment_id must be non-null. References the
+  /// reported post, if this report is for a post.
+  content_post_id String?
+  
+  /// Reported comment's {@link discuss_board_comments.id}. Exactly one of
+  /// content_post_id or content_comment_id must be non-null. References the
+  /// reported comment, if this report is for a comment.
+  content_comment_id String?
+  
+  /// Type of content being reported (e.g., 'post', 'comment'). Required to
+  /// determine which foreign key applies. Ensures correct content reference
+  /// and workflow routing.
+  content_type String
+  
+  /// Reporter-supplied reason for the report. Collected from predefined list
+  /// (spam, harassment, abuse, misinformation) or freeform up to 200
+  /// characters. Used for workflow triage and full-text search by moderators.
+  reason String
+  
+  /// Current workflow status (pending, under_review, resolved, dismissed,
+  /// escalated). Used for moderation queue, progress, and reporting.
+  status String
+  
+  /// ID of the associated moderation action (if resolved). Used for historical
+  /// workflow, linking to decisions/actions. Nullable—assigned only when
+  /// resolution occurs.
+  moderation_action_id String?
+  
+  /// UTC creation timestamp for the report, required for audit and
+  /// chronological workflow.
+  created_at DateTime
+  
+  /// UTC last updated timestamp.
+  updated_at DateTime
+  
+  /// UTC deleted timestamp, set if report is soft deleted (for compliance).
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  reporterMember discuss_board_members @relation(fields: [reporter_member_id], references: [id], onDelete: Cascade)
+  contentPost discuss_board_posts? @relation(fields: [content_post_id], references: [id], onDelete: Cascade)
+  contentComment discuss_board_comments? @relation(fields: [content_comment_id], references: [id], onDelete: Cascade)
+  
+  discuss_board_moderation_logs discuss_board_moderation_logs[]
+  
+  @@index([content_post_id])
+  @@index([content_comment_id])
+  
+  @@unique([reporter_member_id, content_post_id, content_comment_id], map: "discuss_board_content_reports_reporter_member_id_conte_82b7d2a7")
+  @@index([status])
+  @@index([moderation_action_id])
+}
+
+/// Tracks actionable moderation decisions (e.g., content removal, warning,
+/// user suspension) initiated as the resolution of reports or other
+/// triggers. Includes responsible moderator/admin, target content/user, type
+/// of action, reason, decision narrative, and linkage to appeal if present.
+/// Supports compliance by enabling queries by action type, actor, or
+/// content. All moderation history for audit trails is anchored here. May
+/// reference multiple reports via moderation_action_id in reports.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_moderation_actions {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Moderator/admin executing the action. {@link discuss_board_moderators.id}
+  /// or {@link discuss_board_administrators.id}.
+  moderator_id String
+  
+  /// Target user of action (usually the content author). {@link
+  /// discuss_board_members.id}. Nullable for actions on content only (not
+  /// directly on a user).
+  target_member_id String?
+  
+  /// Target post id if action taken on post. {@link discuss_board_posts.id}.
+  target_post_id String?
+  
+  /// Target comment id if action taken on comment. {@link
+  /// discuss_board_comments.id}.
+  target_comment_id String?
+  
+  /// ID of the associated appeal if present. Nullable; for business linkage
+  /// only, not enforced as a FK due to circular dependency concerns. See
+  /// {@link discuss_board_appeals.id}.
+  appeal_id String?
+  
+  /// Type of moderation action (remove_content, warn, suspend_user, ban_user,
+  /// escalate, etc). Enables filtering and business logic enforcement for
+  /// audit and policy.
+  action_type String
+  
+  /// Moderator/admin's chosen reason or rationale for action, displayed to
+  /// target user and for legal/audit review.
+  action_reason String
+  
+  /// Freeform optional narrative describing moderator context/analysis for
+  /// final decision. Aids transparency, supports appeals/audits.
+  decision_narrative String?
+  
+  /// Current status (active, reversed, escalated, completed, pending_applied).
+  /// Used for tracking and workflow management. Historical records remain for
+  /// all actions.
+  status String
+  
+  /// UTC timestamp for when action was created. Used for audit/order of
+  /// operations.
+  created_at DateTime
+  
+  /// UTC timestamp of last update.
+  updated_at DateTime
+  
+  /// Soft deletion timestamp for removal from active search (audit/compliance
+  /// only).
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  moderator discuss_board_moderators @relation(fields: [moderator_id], references: [id], onDelete: Cascade)
+  targetMember discuss_board_members? @relation(fields: [target_member_id], references: [id], onDelete: Cascade)
+  targetPost discuss_board_posts? @relation(fields: [target_post_id], references: [id], onDelete: Cascade)
+  targetComment discuss_board_comments? @relation(fields: [target_comment_id], references: [id], onDelete: Cascade)
+  
+  discuss_board_appeals discuss_board_appeals?
+  discuss_board_moderation_logs discuss_board_moderation_logs[]
+  
+  @@index([moderator_id])
+  @@index([target_member_id])
+  @@index([target_post_id])
+  @@index([target_comment_id])
+  
+  @@index([action_type])
+  @@index([status])
+}
+
+/// Captures appeals submitted by users regarding moderation actions. Used to
+/// manage re-reviews and escalation workflows, ensuring fair process and
+/// business/legal compliance. Records which action is appealed, appellant
+/// user, status, rationale, and administrative resolution log. Allows
+/// independent search and workflow management, as appeals can traverse
+/// multiple moderation actions or administrators. Supports tracking appeal
+/// lifecycle (pending, in_review, accepted, denied, escalated, closed).
+/// Enables transparency and user trust.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_appeals {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// The moderation action being appealed. {@link
+  /// discuss_board_moderation_actions.id}. Required for linking review chains,
+  /// audit.
+  moderation_action_id String
+  
+  /// The member submitting the appeal. {@link discuss_board_members.id}.
+  appellant_member_id String
+  
+  /// Freeform rationale or argument provided by the appellant, explaining why
+  /// the moderation action should be reconsidered. Used by administrators for
+  /// re-review.
+  appeal_rationale String
+  
+  /// Current workflow status (pending, in_review, accepted, denied, escalated,
+  /// closed). Used in queueing, reporting, and managing the appeals process.
+  status String
+  
+  /// Resolution notes entered by the administrator or appellate moderator upon
+  /// closing the appeal. Documents outcome for further audit or user
+  /// transparency.
+  resolution_notes String?
+  
+  /// UTC timestamp when appeal was submitted.
+  created_at DateTime
+  
+  /// UTC timestamp of last update to the appeal record.
+  updated_at DateTime
+  
+  /// Soft deleted timestamp, if the appeal is removed from active search (for
+  /// audit/compliance only).
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  moderationAction discuss_board_moderation_actions @relation(fields: [moderation_action_id], references: [id], onDelete: Cascade)
+  appellantMember discuss_board_members @relation(fields: [appellant_member_id], references: [id], onDelete: Cascade)
+  
+  discuss_board_moderation_logs discuss_board_moderation_logs[]
+  
+  @@index([appellant_member_id])
+  
+  @@unique([moderation_action_id])
+  @@index([status])
+}
+
+/// Supports fine-grained logging of every important moderation event,
+/// action, escalation step, or workflow update. Enables detailed audit trail
+/// for compliance, transparency, and business process improvement. Logs may
+/// reference specific moderation action, appeal, or content, and capture
+/// actor, event type, details, timestamp. Used exclusively for
+/// system/logical review—not directly managed by end users. Enables strict
+/// normalization and referential integrity. Useful for administrators and
+/// compliance investigators.
+///
+/// @namespace Moderation
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_moderation_logs {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// The user (member, moderator, or administrator) responsible for the logged
+  /// event. Foreign key to either discuss_board_members,
+  /// discuss_board_moderators, or discuss_board_administrators depending on
+  /// context.
+  actor_member_id String?
+  
+  /// Associated moderation action. Enables workflow/event traceability. {@link
+  /// discuss_board_moderation_actions.id}.
+  related_action_id String?
+  
+  /// Associated appeal. Links log entry to appeal process where appropriate.
+  /// {@link discuss_board_appeals.id}.
+  related_appeal_id String?
+  
+  /// Associated report. Enables granular linkage to the report that initiated
+  /// the workflow. {@link discuss_board_content_reports.id}.
+  related_report_id String?
+  
+  /// Type of moderation log event (report_received, action_taken,
+  /// appeal_created, status_update, escalation, etc). Enables search/filter
+  /// for auditing and performance review.
+  event_type String
+  
+  /// Optional freeform field for extra detail about the log event. Documenting
+  /// context may support compliance/governance.
+  event_details String?
+  
+  /// UTC timestamp for the log event creation for accurate audit trail.
+  created_at DateTime
+  
+  /// Soft deletion timestamp for audit compliance. Soft deleted logs remain
+  /// for reference, not shown in normal searches.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  actorMember discuss_board_members? @relation(fields: [actor_member_id], references: [id], onDelete: Cascade)
+  relatedAction discuss_board_moderation_actions? @relation(fields: [related_action_id], references: [id], onDelete: Cascade)
+  relatedAppeal discuss_board_appeals? @relation(fields: [related_appeal_id], references: [id], onDelete: Cascade)
+  relatedReport discuss_board_content_reports? @relation(fields: [related_report_id], references: [id], onDelete: Cascade)
+  
+  @@index([actor_member_id])
+  
+  @@index([event_type])
+  @@index([related_action_id])
+  @@index([related_appeal_id])
+  @@index([related_report_id])
+}

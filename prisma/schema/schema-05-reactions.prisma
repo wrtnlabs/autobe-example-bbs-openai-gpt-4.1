@@ -1,0 +1,96 @@
+/// Represents each individual reaction (like/dislike) made by a member on a
+/// specific post. Ensures exactly one reaction per member-post pair, allows
+/// toggling between reaction types, and supports complete audit trail.
+/// Related directly to {@link discuss_board_members.id} and {@link
+/// discuss_board_posts.id}. Supports soft-deletion for compliance and
+/// auditability.
+///
+/// @namespace Reactions
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_post_reactions {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Reactor member's {@link discuss_board_members.id}. Indicates which member
+  /// performed the reaction.
+  discuss_board_member_id String
+  
+  /// Target post's {@link discuss_board_posts.id} which receives the reaction.
+  discuss_board_post_id String
+  
+  /// Type of reaction. Either 'like' or 'dislike'. Business logic restricts to
+  /// these values.
+  reaction_type String
+  
+  /// Timestamp when the reaction was first created.
+  created_at DateTime
+  
+  /// Timestamp for the most recent update to the reaction (toggle or metadata
+  /// change).
+  updated_at DateTime
+  
+  /// Soft delete timestamp; nullable. Set when reaction is logically removed
+  /// and no longer counted for aggregates.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  member discuss_board_members @relation(fields: [discuss_board_member_id], references: [id], onDelete: Cascade)
+  post discuss_board_posts @relation(fields: [discuss_board_post_id], references: [id], onDelete: Cascade)
+  
+  @@unique([discuss_board_member_id, discuss_board_post_id], map: "discuss_board_post_reactions_discuss_board_member_id_d_06ff5000")
+  @@index([discuss_board_post_id, reaction_type], map: "discuss_board_post_reactions_discuss_board_post_id_rea_c33abb32")
+  @@index([created_at])
+  @@index([updated_at])
+}
+
+/// Captures each member's explicit like/dislike reaction to a particular
+/// comment. Enforces single reaction per member-comment pair and audit-aware
+/// toggling of reaction. References {@link discuss_board_members.id} and
+/// {@link discuss_board_comments.id}. Includes soft-delete pattern for
+/// reversibility and compliance.
+///
+/// @namespace Reactions
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_comment_reactions {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Member's {@link discuss_board_members.id} who reacted to the comment.
+  discuss_board_member_id String
+  
+  /// Target comment's {@link discuss_board_comments.id}.
+  discuss_board_comment_id String
+  
+  /// Type of reaction: 'like' or 'dislike'. Only one value per comment/member.
+  /// Business logic enforces valid values.
+  reaction_type String
+  
+  /// Timestamp of reaction creation.
+  created_at DateTime
+  
+  /// Timestamp of last modification (for toggling or recovery).
+  updated_at DateTime
+  
+  /// Soft delete; nullable. Populated when reaction is not counted in
+  /// aggregates, supports logical undeletion for audit.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  member discuss_board_members @relation(fields: [discuss_board_member_id], references: [id], onDelete: Cascade)
+  comment discuss_board_comments @relation(fields: [discuss_board_comment_id], references: [id], onDelete: Cascade)
+  
+  @@unique([discuss_board_member_id, discuss_board_comment_id], map: "discuss_board_comment_reactions_discuss_board_member_i_dae2290e")
+  @@index([discuss_board_comment_id, reaction_type], map: "discuss_board_comment_reactions_discuss_board_comment__f3d45f0a")
+  @@index([created_at])
+  @@index([updated_at])
+}

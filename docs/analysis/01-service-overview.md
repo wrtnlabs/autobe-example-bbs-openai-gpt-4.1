@@ -1,141 +1,137 @@
-# User Roles and Authentication Requirements for discussionBoard
+# User Roles and Permissions — Requirements Analysis for discussBoard
 
-## 1. User Role Definitions and Hierarchy
+## User Role Hierarchy
 
-### Overview of Defined User Roles
-The service defines four explicit user roles. Each is described by its permissions, usage contexts, and restrictions.
-
-| Role         | Description                                                                                                           | Kind           |
-|--------------|-----------------------------------------------------------------------------------------------------------------------|----------------|
-| visitor      | Unauthenticated users who can browse public discussions but cannot participate or interact beyond viewing and searching. Typically uses read-only features and can view limited public profiles. | guest          |
-| user         | Authenticated members who can create, edit, and delete their own posts and comments, participate in voting/polling, and flag inappropriate content. They have standard participation privileges in open forums. | member         |
-| moderator    | Experienced members trusted to oversee discussions, moderate content, handle user reports, enforce community guidelines, and manage flagged posts/comments. Can restrict or suspend user accounts for violations. | member         |
-| admin        | System administrators with the highest permissions. Can manage users, roles, categories, system-wide settings, oversee all discussions, integrate external APIs, and maintain service compliance and security. | admin          |
-
-### Role Hierarchy
-- visitor < user < moderator < admin
-- Each higher role inherits all permissions and the responsibilities of roles below it, but with additional access and management capabilities.
-
-## 2. Authentication Flow (JWT, Registration, Login, Session Management)
-
-### General Requirements
-- THE discussionBoard SHALL use token-based authentication with JSON Web Tokens (JWT) for all API access control.
-- WHEN a user registers or logs in successfully, THE discussionBoard SHALL issue a JWT access token (expiration: 15 mins) and a refresh token (expiration: 14 days).
-- THE JWT payload SHALL include: userId, role, permissions array, and issued-at/expiration timestamps.
-- IF any access token is found to be expired, THEN THE discussionBoard SHALL deny access and request token refresh.
-- WHEN a refresh token is used successfully, THE discussionBoard SHALL issue a new access token and rotate the refresh token.
-- WHILE authenticated, THE system SHALL validate JWTs for every protected endpoint before authorizing actions.
-
-### Registration
-- WHEN a new user registers, THE discussionBoard SHALL require unique email verification and a password meeting complexity rules (min 10 characters, must include at least one uppercase, numeric, and special character).
-- WHEN registration succeeds, THE discussionBoard SHALL assign the 'user' role by default.
-- IF registration fails (duplicate email, invalid data), THEN THE discussionBoard SHALL show a specific error message and log the event.
-
-### Login
-- WHEN a user provides valid credentials, THE discussionBoard SHALL authenticate using secure password hashing and issue tokens as above.
-- IF login fails due to invalid credentials, THEN THE discussionBoard SHALL show a clear error and increment a failed login counter for rate limiting.
-
-### Email Verification
-- WHEN a user registers, THE discussionBoard SHALL send a verification link via email.
-- IF a user attempts to interact (post, comment, vote) BEFORE verifying, THEN THE discussionBoard SHALL deny the action and prompt for verification.
-
-### Password Reset
-- WHEN a user requests password reset, THE discussionBoard SHALL email a single-use, time-limited reset token which expires after 60 minutes.
-- IF a reset token is used after expiration, THEN THE discussionBoard SHALL reject with an explicit error.
-
-### Session and Token Management
-- THE system SHALL maintain only one active refresh token per device/session per user.
-- WHEN a user logs out, THE system SHALL revoke the relevant refresh token immediately.
-- IF a user requests logout from all devices, THEN THE system SHALL revoke all refresh tokens for that user.
-
-## 3. Permission Matrix and Access Rules
-
-| Action                                           | visitor | user | moderator | admin |
-|--------------------------------------------------|---------|------|-----------|-------|
-| Browse public posts, threads, and categories     | ✅      | ✅   | ✅        | ✅    |
-| Search content                                  | ✅      | ✅   | ✅        | ✅    |
-| Register account                                | ✅      | ❌   | ❌        | ❌    |
-| Create new posts                                | ❌      | ✅   | ✅        | ✅    |
-| Edit/delete own posts                           | ❌      | ✅   | ✅        | ✅    |
-| Comment on posts                                | ❌      | ✅   | ✅        | ✅    |
-| Vote on polls or posts                          | ❌      | ✅   | ✅        | ✅    |
-| Flag/report content                             | ❌      | ✅   | ✅        | ✅    |
-| View user profiles                              | ✅      | ✅   | ✅        | ✅    |
-| Edit own profile                                | ❌      | ✅   | ✅        | ✅    |
-| Moderate content (edit/delete any post/comment)  | ❌      | ❌   | ✅        | ✅    |
-| Handle content reports                          | ❌      | ❌   | ✅        | ✅    |
-| Restrict/suspend user accounts                  | ❌      | ❌   | ✅        | ✅    |
-| Assign/revoke moderator roles                   | ❌      | ❌   | ❌        | ✅    |
-| Manage categories and tags                      | ❌      | ❌   | ❌        | ✅    |
-| Configure system-wide settings                  | ❌      | ❌   | ❌        | ✅    |
-| Access audit logs and reports                   | ❌      | ❌   | ❌        | ✅    |
-| Integrate external APIs                         | ❌      | ❌   | ❌        | ✅    |
-| Manage compliance/security                      | ❌      | ❌   | ❌        | ✅    |
-
-#### Permission Rules (EARS Format)
-- WHEN a visitor attempts to post, comment, or vote, THEN THE system SHALL deny the action and provide a registration prompt.
-- WHEN a user attempts a moderator/admin action, THEN THE system SHALL return an explicit "permission denied" error.
-- WHERE a user is suspended, THE system SHALL restrict all write operations and display a suspension notice.
-- THE system SHALL always validate permissions based on the JWT role claim for every API endpoint.
-- WHEN an admin assigns a moderator role, THE system SHALL update the user's JWT claims after the next login or upon manual token refresh.
-
-## 4. Role-Based Use Cases and Scenarios
-
-### Visitor
-- Browses forum, categories, and public profiles without logging in.
-- Searches for content and reads posts but is unable to interact, vote, or flag.
-
-### User
-- Creates and edits posts in allowed categories after verifying email.
-- Comments on existing threads and participates in polls.
-- Flags content for review and edits/deletes their own material.
-- Receives notifications about thread replies, flags on their content, or account status changes.
-
-### Moderator
-- Reviews pending content flags and performs moderation actions: edit, delete, approve, or restrict content.
-- Suspends or restricts user accounts for rules violations, with audit trail for each action.
-- Efficiently searches, filters, and reviews flagged content across the service.
-
-### Admin
-- Manages system-wide configuration, category structures, and API integrations.
-- Creates, changes, or revokes user and moderator roles.
-- Accesses audit logs and all compliance data for external review.
-
-#### Typical User Authentication Journey (Mermaid Diagram)
 ```mermaid
 graph LR
-  subgraph "User Registration and Authentication Flow"
-    VST["Visitor Accesses Homepage"] --> RG["User Registers with Email/Password"]
-    RG --> VV["Email Verification Sent"]
-    VV --> VE["User Verifies Email"]
-    VE --> LG["User Logs In"]
-    LG --> TK["JWT Issued (Access & Refresh Tokens)"]
-    TK --> UH["User Is Authenticated"]
-  end
-  UH -->|"Access Protected Features"| AC["API Requires Role-permission JWT Validation"]
-  AC -->|"Allow"| PFX["Action Permitted"]
-  AC -.->|"Deny"| DNY["Permission Denied/Error Sent"]
+    GUEST["Guest"] --> MEMBER["Member"]
+    MEMBER --> MODERATOR["Moderator"]
+    MODERATOR --> ADMIN["Administrator"]
 ```
 
-## 5. Security and Compliance Requirements
-
-- THE system SHALL enforce HTTPS/TLS at all endpoints handling authentication data or tokens.
-- THE system SHALL hash all passwords with an industry standard, adaptive algorithm (e.g., bcrypt, Argon2).
-- THE system SHALL never store plaintext user credentials.
-- THE system SHALL enforce minimum password/credential complexity on registration and password change.
-- THE system SHALL lock out accounts or insert additional challenge after 5 consecutive failed login attempts (rate limiting/timeout for brute force protection).
-- THE system SHALL log all authentication, moderator, and admin actions involving access or role changes, and retain those logs for at least 3 years for compliance.
-- THE system SHALL allow admins to export access logs for external compliance review.
-- THE system SHALL ensure JWT secret keys are securely managed and rotated with strict access controls.
-- THE system SHALL automatically expire sessions for all users after 30 days of inactivity, requiring credential re-authentication.
-
-## 6. Role Assignment and Hierarchy Constraints
-
-- WHEN a user is initially created, THE system SHALL assign the 'user' role, unless explicitly set by an admin.
-- WHEN a moderator or admin role is requested, THE system SHALL enforce explicit admin approval before role escalation.
-- THE system SHALL maintain an explicit record of all role changes, including timestamps, initiating user, and justification for audit purposes.
-
+User roles form a clear escalation chain: Guest → Member → Moderator → Administrator. Privileges and responsibilities increase as users move up this hierarchy; de-escalation (demotion) can occur only via explicit administrative action.
 
 ---
+## Role Descriptions
 
-This document provides business requirements only. All technical implementation decisions, including architecture, database design, and API details, belong to developers. This document describes WHAT the system should do, not HOW to build it.
+### Guest
+**Definition:** Any user not authenticated with an account.
+- **Capabilities:**
+    - View all public posts and comments without restriction.
+    - Search and navigate through public content.
+- **Limitations:**
+    - Cannot create, comment, edit, or delete any content.
+    - Cannot interact (like/dislike, report, etc.) with any content.
+    - Must register or log in for participation beyond browsing.
+    - No access to account management or personalization.
+
+### Member
+**Definition:** Authenticated, registered users.
+- **Capabilities:**
+    - Create posts and comments (including replies).
+    - Edit and delete own posts/comments within system-defined time window.
+    - Like/dislike, and report inappropriate content.
+    - Manage own account settings and passwords.
+- **Limitations:**
+    - Cannot access or use moderation or administrative features.
+    - Cannot edit or delete content not authored by themselves.
+    - Actions are subject to community guidelines and platform policies.
+
+### Moderator
+**Definition:** Elevated role—users selected to enforce community standards.
+- **Capabilities:**
+    - View, edit, or delete any post/comment (regardless of author).
+    - Access list of all reported content and take decisions.
+    - Suspend or ban members (temporary/permanent, within policy).
+    - Communicate warnings to users via the platform.
+- **Limitations:**
+    - Cannot alter site policies or system-wide configurations.
+    - Cannot assign or remove moderator or administrator rights.
+    - Only administrators can overrule moderator actions in case of dispute.
+
+### Administrator
+**Definition:** Super-user with unrestricted platform governance.
+- **Capabilities:**
+    - All moderator privileges, plus:
+        - Management of all user roles, including assigning/revoking moderators.
+        - Configuration of platform-wide policies, settings, and maintenance tools.
+        - Oversight and auditing of all moderation and administrative action.
+- **Limitations:**
+    - Bound by platform legal obligations and external regulatory compliance.
+
+---
+## Authentication Requirements and Flows
+
+### Core Principles
+- THE system SHALL use JWT-based authentication for any API or business function requiring user identification.
+
+### Flows (All Written in EARS Format for Business Clarity)
+- WHEN a guest registers, THE system SHALL collect at minimum: unique email, password, and explicit consent to terms.
+- WHEN a user confirms their registration, THE system SHALL send a verification email and require verification prior to posting or interacting.
+- WHEN a user logs in, THE system SHALL issue JWT access and refresh tokens (access token expires within 15–30 minutes, refresh token within 7–30 days).
+- THE system SHALL store tokens in httpOnly cookies by default, but localStorage MAY be additionally offered for specific frontend frameworks if business conditions require.
+- WHEN a user requests a password reset, THE system SHALL send a secure, time-limited reset link by email.
+- WHEN a user changes their password, THE system SHALL revoke all of that user's existing refresh tokens.
+- WHEN a token has expired or is invalid, THE system SHALL return an explicit error and require the user to refresh or re-authenticate.
+- WHEN a user logs out, THE system SHALL revoke access and refresh tokens unique to that session.
+- WHERE a user or administrator requests, THE system SHALL revoke all of a user's sessions across all devices.
+- THE JWT payload issued by the system SHALL include the following business terms: userId, role, and an active array enumerating all permissions for the current session.
+
+---
+## Permission Matrix
+
+| Action                                              | Guest | Member | Moderator | Administrator |
+|-----------------------------------------------------|:-----:|:------:|:---------:|:-------------:|
+| View public posts and comments                      |  ✅   |   ✅   |    ✅     |      ✅       |
+| Search posts and comments                           |  ✅   |   ✅   |    ✅     |      ✅       |
+| Register an account                                 |  ✅   |   ❌   |    ❌     |      ❌       |
+| Login                                               |  ✅   |   ❌   |    ❌     |      ❌       |
+| Create post/comment                                 |  ❌   |   ✅   |    ✅     |      ✅       |
+| Edit/delete own post/comment                        |  ❌   |   ✅   |    ✅     |      ✅       |
+| Like/dislike content                                |  ❌   |   ✅   |    ✅     |      ✅       |
+| Report content                                      |  ❌   |   ✅   |    ✅     |      ✅       |
+| Edit/delete any post/comment                        |  ❌   |   ❌   |    ✅     |      ✅       |
+| Suspend/ban user                                    |  ❌   |   ❌   |    ✅     |      ✅       |
+| Assign/revoke moderator/admin role                  |  ❌   |   ❌   |    ❌     |      ✅       |
+| Change site-wide policy or configuration            |  ❌   |   ❌   |    ❌     |      ✅       |
+| Manage own account                                  |  ❌   |   ✅   |    ✅     |      ✅       |
+| Access moderation tools                             |  ❌   |   ❌   |    ✅     |      ✅       |
+| Perform system maintenance                          |  ❌   |   ❌   |    ❌     |      ✅       |
+
+---
+## Role-based Access and Limitations (Business Logic, EARS Format)
+
+### Universal Rules
+- THE system SHALL enforce every access-control and permission boundary strictly as defined in the permission matrix above.
+
+### Protection Against Unauthorized Access
+- WHEN a guest attempts to perform any member-only, moderator-only, or admin-only function, THE system SHALL deny access and return a clear error message (HTTP 401/403, with descriptive rationale).
+- WHEN a member tries to perform moderator or admin actions, THE system SHALL block the attempt and return an explanatory error (authorization failure).
+- WHEN a moderator tries to perform administrator-only functions, THE system SHALL deny access and audit the event.
+
+### Token and Session Management
+- WHEN a user's JWT token is invalid or expired, THE system SHALL require token refresh or re-login before further interaction.
+- WHEN a member is suspended or banned, THE system SHALL block login and block all content interaction features (with clear explanation shown to the user).
+- WHERE an administrator alters user privileges or access (assigns or revokes moderator/admin), THE system SHALL log this event and notify the affected user.
+
+### Escalation Rules
+- WHEN a member is promoted to moderator, THE system SHALL allow only administrators to assign the new role explicitly.
+- WHEN moderator or administrator actions affect content or user status (e.g., deletion, suspension), THE system SHALL deliver notifications outlining the reason and consequences.
+- IF two or more moderators attempt to action the same content/user in conflicting ways, THEN THE system SHALL record both actions and defer to administrator arbitration, with all event details logged.
+
+### Business-driven Restrictions
+- WHERE a role's permissions change, THE system SHALL require fresh JWT issuance and update all session caches immediately.
+- THE system SHALL ensure all permission checks occur server-side and are not modifiable by client-side users.
+
+---
+## Additional Business Requirements and Compliance (JWT)
+- THE system SHALL utilize JWT (JSON Web Token) for all API authentication involving user-specific data or actions.
+- THE JWT access token SHALL expire between 15–30 minutes from issuance; refresh tokens SHALL expire between 7–30 days.
+- THE system SHALL invalidate refresh tokens globally on password change or upon explicit session revocation request.
+- THE JWT payload SHALL include userId, role, and a permissions array mapped to the current session’s privileges.
+
+---
+## Summary
+THE discussBoard platform defines clear, business-driven boundaries for each user role, strictly controls action-privilege mapping, and enforces escalation only via authorized administrative action. Access control is implemented with JWT, including session- and business-events-driven revocation strategies. All access boundaries, permission rules, and escalation mechanics are documented above in EARS and business terms for backend implementation.
+
+To further reference feature-specific behaviors, see the [Core Functional Requirements Document](./04-core-functional-requirements.md), [Moderation and Enforcement](./06-moderation-and-enforcement.md), and [Security and Privacy Requirements](./07-security-and-privacy-requirements.md).

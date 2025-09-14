@@ -4,124 +4,149 @@ import typia, { tags } from "typia";
 import { Prisma } from "@prisma/client";
 import { v4 } from "uuid";
 import { toISOStringSafe } from "../util/toISOStringSafe";
-import { IDiscussionBoardModerator } from "@ORGANIZATION/PROJECT-api/lib/structures/IDiscussionBoardModerator";
-import { IAuthorizationToken } from "@ORGANIZATION/PROJECT-api/lib/structures/IAuthorizationToken";
+import { IDiscussBoardModerator } from "@ORGANIZATION/PROJECT-api/lib/structures/IDiscussBoardModerator";
+import { ModeratorPayload } from "../decorators/payload/ModeratorPayload";
 
 /**
- * Register a new moderator account and issue initial tokens
- * (discussion_board_users + discussion_board_moderators).
+ * Registers a new moderator (admin escalation flow).
  *
- * This operation allows a new moderator to register an account in the system.
- * It creates a new row in discussion_board_users (which stores authentication
- * credentials for all user-like roles) and issues a JWT access/refresh token
- * pair with role='moderator'. The operation requires (and validates) a unique
- * email and username—the fields enforced by the discussion_board_users schema.
- * During registration, password_hash is stored securely, and is_verified is set
- * to false until the moderator completes email confirmation. Upon user
- * creation, the discussion_board_moderators table is updated to link this user
- * with moderator privileges (with assigned_at timestamp set to now, is_active
- * true, and revoked_at null). Security-critical fields such as password_hash
- * and email must adhere to complexity and uniqueness requirements, and any
- * business rule violation will be rejected. This endpoint does not permit
- * immediate login until email is verified, as managed by other schema tables
- * (verification flows not explicitly handled by this call). Works in
- * conjunction with moderator login, token refresh, and email verification
- * APIs.
+ * Assigns moderator rights to an existing, eligible member, creates a moderator
+ * record, and issues JWT credentials for moderator access. Registration is only
+ * permitted for members with 'active' status and who are not deleted, with an
+ * active and email-verified user account. Duplicate escalation, assigning
+ * banned/suspended/pending members, or other ineligible cases will throw
+ * errors. Returns the full moderator authorization context, JWT credentials,
+ * and public member summary upon success.
  *
- * @param props - Request properties
- * @param props.body - Moderator registration info (email, username, password,
- *   display_name, consent)
- * @returns JWT access and refresh tokens as well as moderator record
- * @throws {Error} When email or username already exists, or other DB errors
+ * @param props - Object containing moderator authentication and
+ *   IDiscussBoardModerator.ICreate details
+ * @param props.moderator - The authenticated moderator payload, for
+ *   authorization checks (not used for business validation, but required by
+ *   route)
+ * @param props.body - Moderator creation input: member_id and
+ *   assigned_by_administrator_id
+ * @returns IDiscussBoardModerator.IAuthorized - The new moderator record,
+ *   session tokens, and member summary
+ * @throws {Error} If the member does not exist, is deleted, not eligible,
+ *   already a moderator, or account inactivity/verification fails.
  */
 export async function post__auth_moderator_join(props: {
-  body: IDiscussionBoardModerator.IJoin;
-}): Promise<IDiscussionBoardModerator.IAuthorized> {
+  moderator: ModeratorPayload;
+  body: IDiscussBoardModerator.ICreate;
+}): Promise<IDiscussBoardModerator.IAuthorized> {
   const { body } = props;
-
-  // Uniqueness check (up front to return meaningful error)
-  const duplicate = await MyGlobal.prisma.discussion_board_users.findFirst({
+  // 1. Validate member existence and not deleted
+  const member = await MyGlobal.prisma.discuss_board_members.findFirst({
     where: {
-      OR: [{ email: body.email }, { username: body.username }],
+      id: body.member_id,
+      deleted_at: null,
     },
-    select: { id: true },
   });
-  if (duplicate) throw new Error("Email or username already exists");
-
-  // Password hashing
-  const password_hash = await MyGlobal.password.hash(body.password);
+  if (!member) {
+    throw new Error("Member not found or deleted");
+  }
+  // 2. Validate user account for this member
+  const account = await MyGlobal.prisma.discuss_board_user_accounts.findFirst({
+    where: {
+      id: member.user_account_id,
+      deleted_at: null,
+    },
+  });
+  if (
+    !account ||
+    account.status !== "active" ||
+    account.email_verified !== true
+  ) {
+    throw new Error("User account is either not active or not email verified");
+  }
+  // 3. Validate member status is active
+  if (member.status !== "active") {
+    throw new Error(
+      "Member must have 'active' status for escalation to moderator",
+    );
+  }
+  // 4. Prevent duplicate moderator assignment
+  const existing = await MyGlobal.prisma.discuss_board_moderators.findFirst({
+    where: {
+      member_id: member.id,
+      deleted_at: null,
+    },
+  });
+  if (existing) {
+    throw new Error("This member already has an active moderator assignment");
+  }
+  // 5. Insert moderator
   const now = toISOStringSafe(new Date());
-
-  const user_id = v4() as string & tags.Format<"uuid">;
-  // Create user record
-  await MyGlobal.prisma.discussion_board_users.create({
+  const modId = v4();
+  const moderator = await MyGlobal.prisma.discuss_board_moderators.create({
     data: {
-      id: user_id,
-      email: body.email,
-      username: body.username,
-      display_name: body.display_name ?? undefined,
-      password_hash,
-      is_verified: false,
-      is_suspended: false,
-      suspended_until: null,
-      last_login_at: null,
-      created_at: now,
-      updated_at: now,
-      deleted_at: null,
-    },
-  });
-
-  // Create moderator record
-  const moderator_id = v4() as string & tags.Format<"uuid">;
-  await MyGlobal.prisma.discussion_board_moderators.create({
-    data: {
-      id: moderator_id,
-      user_id,
+      id: modId,
+      member_id: member.id,
+      assigned_by_administrator_id: body.assigned_by_administrator_id,
       assigned_at: now,
-      revoked_at: null,
-      is_active: true,
-      suspended_until: null,
+      status: "active",
       created_at: now,
       updated_at: now,
-      deleted_at: null,
+      // revoked_at and deleted_at omitted (left null)
     },
   });
-
-  // JWT tokens with correct moderator payload
-  const access_expiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-  const refresh_expiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
-  const access_payload = {
-    id: user_id,
-    type: "moderator" as const,
-  };
-  const access = jwt.sign(access_payload, MyGlobal.env.JWT_SECRET_KEY, {
-    expiresIn: "1h",
-    issuer: "autobe",
-  });
-  const refresh = jwt.sign(
-    { id: user_id, type: "moderator" as const },
-    MyGlobal.env.JWT_SECRET_KEY,
-    { expiresIn: "7d", issuer: "autobe" },
+  // Generate token fields and JWTs
+  const expiresInSeconds = 3600; // 1 hour access token
+  const refreshInSeconds = 604800; // 7 days refresh token
+  const accessExpiredAt = toISOStringSafe(
+    new Date(Date.now() + expiresInSeconds * 1000),
+  );
+  const refreshExpiredAt = toISOStringSafe(
+    new Date(Date.now() + refreshInSeconds * 1000),
   );
 
-  const token = {
-    access,
-    refresh,
-    expired_at: toISOStringSafe(access_expiry),
-    refreshable_until: toISOStringSafe(refresh_expiry),
+  // Access JWT: moderator role session
+  const accessPayload = {
+    id: moderator.id,
+    member_id: moderator.member_id,
+    type: "moderator",
   };
-
-  // Return moderator object
-  const moderator: IDiscussionBoardModerator = {
-    id: moderator_id,
-    user_id,
-    assigned_at: now,
-    revoked_at: null,
-    is_active: true,
-    suspended_until: null,
-    created_at: now,
-    updated_at: now,
-    deleted_at: null,
+  const access = jwt.sign(accessPayload, MyGlobal.env.JWT_SECRET_KEY, {
+    expiresIn: expiresInSeconds,
+    issuer: "autobe",
+  });
+  // Refresh JWT: restrict contents to session tracking
+  const refreshPayload = {
+    id: moderator.id,
+    token_type: "refresh",
+    type: "moderator",
   };
-  return { token, moderator };
+  const refresh = jwt.sign(refreshPayload, MyGlobal.env.JWT_SECRET_KEY, {
+    expiresIn: refreshInSeconds,
+    issuer: "autobe",
+  });
+  // 6. Compose member summary
+  const memberSummary = {
+    id: member.id,
+    nickname: member.nickname,
+    status: member.status,
+  };
+  // 7. Assemble and return
+  return {
+    id: moderator.id,
+    member_id: moderator.member_id,
+    assigned_by_administrator_id: moderator.assigned_by_administrator_id,
+    assigned_at: toISOStringSafe(moderator.assigned_at),
+    revoked_at: moderator.revoked_at
+      ? toISOStringSafe(moderator.revoked_at)
+      : undefined,
+    status: moderator.status,
+    created_at: toISOStringSafe(moderator.created_at),
+    updated_at: toISOStringSafe(moderator.updated_at),
+    deleted_at: moderator.deleted_at
+      ? toISOStringSafe(moderator.deleted_at)
+      : undefined,
+    token: {
+      access,
+      refresh,
+      expired_at: accessExpiredAt,
+      refreshable_until: refreshExpiredAt,
+    },
+    member: memberSummary,
+  };
 }

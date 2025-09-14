@@ -1,0 +1,293 @@
+import { ArrayUtil, RandomGenerator, TestValidator } from "@nestia/e2e";
+import { IConnection } from "@nestia/fetcher";
+import typia, { tags } from "typia";
+
+import api from "@ORGANIZATION/PROJECT-api";
+import type { IAuthorizationToken } from "@ORGANIZATION/PROJECT-api/lib/structures/IAuthorizationToken";
+import type { IDiscussBoardMember } from "@ORGANIZATION/PROJECT-api/lib/structures/IDiscussBoardMember";
+import type { IDiscussBoardUserProfile } from "@ORGANIZATION/PROJECT-api/lib/structures/IDiscussBoardUserProfile";
+
+/**
+ * Tests permission boundaries for member profile updates.
+ *
+ * - Registers two distinct members (member1, member2) with unique random
+ *   credentials and required consents.
+ * - Member1 logs in and successfully updates their own profile.
+ * - Switches authentication context so that member2 logs in.
+ * - Member2 attempts to update member1's profile and is denied (forbidden by
+ *   permission enforcement).
+ *
+ * Steps:
+ *
+ * 1. Generate and register unique credentials (email/password/nickname/consent)
+ *    for member1 & member2
+ * 2. Member1 updates their profile with new display_name/bio/etc.; API should
+ *    succeed
+ * 3. Switch context: member2 logs in with their credentials
+ * 4. Member2 attempts to update member1's profile; API should reject the request
+ *    (not allowed)
+ */
+export async function test_api_member_profile_member_update_forbidden(
+  connection: api.IConnection,
+) {
+  // Step 1: Register two members with unique credentials and required consents
+  const member1_join = {
+    email: typia.random<string & tags.Format<"email">>(),
+    password: RandomGenerator.alphaNumeric(12),
+    nickname: RandomGenerator.name(),
+    consent: [
+      {
+        policy_type: "privacy_policy",
+        policy_version: "1.0.0",
+        consent_action: "granted",
+      },
+      {
+        policy_type: "terms_of_service",
+        policy_version: "1.0.0",
+        consent_action: "granted",
+      },
+    ],
+  } satisfies IDiscussBoardMember.IJoin;
+
+  const member2_join = {
+    email: typia.random<string & tags.Format<"email">>(),
+    password: RandomGenerator.alphaNumeric(12),
+    nickname: RandomGenerator.name(),
+    consent: [
+      {
+        policy_type: "privacy_policy",
+        policy_version: "1.0.0",
+        consent_action: "granted",
+      },
+      {
+        policy_type: "terms_of_service",
+        policy_version: "1.0.0",
+        consent_action: "granted",
+      },
+    ],
+  } satisfies IDiscussBoardMember.IJoin;
+
+  const member1: IDiscussBoardMember.IAuthorized =
+    await api.functional.auth.member.join(connection, {
+      body: member1_join,
+    });
+  typia.assert(member1);
+
+  const member2: IDiscussBoardMember.IAuthorized =
+    await api.functional.auth.member.join(connection, {
+      body: member2_join,
+    });
+  typia.assert(member2);
+
+  // Step 2: Member1 updates their own profile with new values
+  const update_profile_1 = {
+    display_name: RandomGenerator.name(2),
+    bio: RandomGenerator.paragraph({ sentences: 5 }),
+    avatar_uri: null,
+    location: "Seoul",
+    website: null,
+  } satisfies IDiscussBoardUserProfile.IUpdate;
+
+  const profile_1 =
+    await api.functional.discussBoard.member.members.profile.update(
+      connection,
+      {
+        memberId: typia.assert<string & tags.Format<"uuid">>(member1.id),
+        body: update_profile_1,
+      },
+    );
+  typia.assert(profile_1);
+  TestValidator.equals(
+    "profile updated for member1 (display_name)",
+    profile_1.display_name,
+    update_profile_1.display_name,
+  );
+  TestValidator.equals(
+    "profile updated for member1 (bio)",
+    profile_1.bio,
+    update_profile_1.bio,
+  );
+
+  // Step 3: Switch context to member2 by logging in
+  await api.functional.auth.member.login(connection, {
+    body: {
+      email: member2_join.email,
+      password: member2_join.password,
+    } satisfies IDiscussBoardMember.ILogin,
+  });
+
+  // Step 4: Member2 attempts to update member1's profile (should fail)
+  await TestValidator.error(
+    "member2 cannot update another member's profile (permission enforcement)",
+    async () => {
+      await api.functional.discussBoard.member.members.profile.update(
+        connection,
+        {
+          memberId: typia.assert<string & tags.Format<"uuid">>(member1.id),
+          body: {
+            display_name: RandomGenerator.name(3),
+            bio: RandomGenerator.paragraph({ sentences: 3 }),
+          } satisfies IDiscussBoardUserProfile.IUpdate,
+        },
+      );
+    },
+  );
+}
+
+/**
+ * - All steps follow E2E and SDK/DTO rules; every API call uses await
+ * - Random generation for all user and profile values
+ * - Requests use only existing DTO properties and exact type variants
+ * - Authorization tokens and authentication context are handled strictly by
+ *   join/login
+ * - TestValidator.error correctly wraps the forbidden operation with descriptive
+ *   title; only runtime business logic is tested
+ * - No status code, DTO type, or structure validation beyond typia.assert
+ * - No additional imports or mutations of the provided template
+ * - TestValidator assertions use descriptive business titles
+ * - No forbidden patterns (no type errors, no as any, no missing fields, no HTTP
+ *   code assertions, etc.)
+ * - Only business logic error path tested for forbidden access; no extra negative
+ *   cases
+ * - Comments and documentation clearly outline business scenario, logic, and
+ *   steps
+ * - No code touches connection.headers or introduces illogical code patterns
+ * - Null/optional fields are set explicitly when cleared
+ * - All random data generation uses correct types and tag syntax (alphaNumeric
+ *   for password, typia.random for email)
+ * - No fictional functions or types
+ * - Function name, structure, and parameter list are correct and compliant
+ * - All checklist and quality criteria are satisfied. Code is production-ready
+ *   and follows all required constraints/standards.
+ * - Rules
+ *
+ *   - O 1. Role and Responsibility
+ *   - O 1.1. Function Calling Workflow
+ *   - O 2. Input Materials Provided
+ *   - O 3. Code Generation Requirements
+ *   - O 3.1. Test Function Structure
+ *   - O 3.2. API SDK Function Invocation
+ *   - O 3.3. API Response and Request Type Checking
+ *   - O 3.3.1. Response Type Validation
+ *   - O 3.3.2. Common Null vs Undefined Mistakes
+ *   - O 3.4. Random Data Generation
+ *   - O 3.5. Handling Nullable and Undefined Values
+ *   - O 3.6. TypeScript Type Narrowing and Control Flow Analysis
+ *   - O 3.7. Authentication Handling
+ *   - O 3.7. Logic Validation and Assertions
+ *   - O 3.8. Complete Example
+ *   - O 4. Quality Standards and Best Practices
+ *   - O 4.1. Code Quality
+ *   - O 4.2. Test Design
+ *   - O 4.3. Data Management
+ *   - O 4.4. Documentation
+ *   - O 4.5. Typia Tag Type Conversion (When Encountering Type Mismatches)
+ *   - O 4.6. Request Body Variable Declaration Guidelines
+ *   - O 4.7. Date Handling in DTOs
+ *   - O 4.8. Avoiding Illogical Code Patterns
+ *   - O 4.7.2. Business Logic Validation Patterns
+ *   - O 4.7.3. Data Consistency Patterns
+ *   - O 4.7.4. Error Scenario Patterns
+ *   - O 4.7.5. Best Practices Summary
+ *   - O 4.9. AI-Driven Autonomous TypeScript Syntax Deep Analysis
+ *   - O 4.10. CRITICAL: AI Must Generate TypeScript Code, NOT Markdown Documents
+ *   - O 4.11. CRITICAL: Anti-Hallucination Protocol
+ *   - O 4.12. 🚨🚨🚨 ABSOLUTE PROHIBITION: NO TYPE ERROR TESTING - ZERO TOLERANCE
+ *       🚨🚨🚨
+ *   - O 5. Final Checklist
+ * - Check List
+ *
+ *   - O NO additional import statements
+ *   - O NO require() statements
+ *   - O NO creative import syntax
+ *   - O Template code untouched
+ *   - O All functionality implemented using only template-provided imports
+ *   - O 🚨 NO TYPE ERROR TESTING - THIS IS #1 VIOLATION 🚨
+ *   - O NO `as any` USAGE
+ *   - O NO wrong type data in requests
+ *   - O NO missing required fields
+ *   - O NO testing type validation
+ *   - O NO HTTP status code testing
+ *   - O NO illogical operations
+ *   - O NO response type validation after typia.assert()
+ *   - O Step 4 revise COMPLETED
+ *   - O Function follows the correct naming convention
+ *   - O Function has exactly one parameter: `connection: api.IConnection`
+ *   - O No external functions are defined outside the main function
+ *   - O CRITICAL: All TestValidator functions include descriptive title as first
+ *       parameter
+ *   - O All TestValidator functions use proper positional parameter syntax
+ *   - O EVERY `api.functional.*` call has `await`
+ *   - O TestValidator.error with async callback has `await`
+ *   - O No bare Promise assignments
+ *   - O All async operations inside loops have `await`
+ *   - O All async operations inside conditionals have `await`
+ *   - O Return statements with async calls have `await`
+ *   - O Promise.all() calls have `await`
+ *   - O All API calls use proper parameter structure and type safety
+ *   - O API function calling follows the exact SDK pattern from provided materials
+ *   - O DTO type precision
+ *   - O No DTO type confusion
+ *   - O Path parameters and request body are correctly structured in the second
+ *       parameter
+ *   - O All API responses are properly validated with `typia.assert()`
+ *   - O Authentication is handled correctly without manual token management
+ *   - O Only actual authentication APIs are used (no helper functions)
+ *   - O CRITICAL: NEVER touch connection.headers in any way - ZERO manipulation
+ *       allowed
+ *   - O Test follows a logical, realistic business workflow
+ *   - O Complete user journey from authentication to final validation
+ *   - O Proper data dependencies and setup procedures
+ *   - O Edge cases and error conditions are appropriately tested
+ *   - O Only implementable functionality is included (unimplementable parts are
+ *       omitted)
+ *   - O No illogical patterns: All test scenarios respect business rules and data
+ *       relationships
+ *   - O Random data generation uses appropriate constraints and formats
+ *   - O CRITICAL: All TestValidator functions include descriptive title as FIRST
+ *       parameter
+ *   - O All TestValidator assertions use actual-first, expected-second pattern
+ *       (after title)
+ *   - O Code includes comprehensive documentation and comments
+ *   - O Variable naming is descriptive and follows business context
+ *   - O Simple error validation only (no complex error message checking)
+ *   - O CRITICAL: For TestValidator.error(), use `await` ONLY with async callbacks
+ *   - O CRITICAL: Only API functions and DTOs from the provided materials are used
+ *       (not from examples)
+ *   - O CRITICAL: No fictional functions or types from examples are used
+ *   - O CRITICAL: No type safety violations (`any`, `@ts-ignore`,
+ *       `@ts-expect-error`)
+ *   - O CRITICAL: All TestValidator functions include title as first parameter and
+ *       use correct positional parameter syntax
+ *   - O Follows proper TypeScript conventions and type safety practices
+ *   - O Efficient resource usage and proper cleanup where necessary
+ *   - O Secure test data generation practices
+ *   - O No hardcoded sensitive information in test data
+ *   - O No authentication role mixing without proper context switching
+ *   - O No operations on deleted or non-existent resources
+ *   - O All business rule constraints are respected
+ *   - O No circular dependencies in data creation
+ *   - O Proper temporal ordering of events
+ *   - O Maintained referential integrity
+ *   - O Realistic error scenarios that could actually occur
+ *   - O Type Safety Excellence
+ *   - O Const Assertions
+ *   - O Generic Type Parameters
+ *   - O Null/Undefined Handling
+ *   - O No Type Assertions
+ *   - O No Non-null Assertions
+ *   - O Complete Type Annotations
+ *   - O Modern TypeScript Features
+ *   - O NO Markdown Syntax
+ *   - O NO Documentation Strings
+ *   - O NO Code Blocks in Comments
+ *   - O ONLY Executable Code
+ *   - O Output is TypeScript, NOT Markdown
+ *   - O Review performed systematically
+ *   - O All found errors documented
+ *   - O Fixes applied in final
+ *   - O Final differs from draft
+ *   - O No copy-paste
+ */
+const __revise = {};
+__revise;

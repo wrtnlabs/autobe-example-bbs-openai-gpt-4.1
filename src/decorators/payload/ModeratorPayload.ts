@@ -1,15 +1,15 @@
 import { tags } from "typia";
 
 /**
- * Moderator JWT Payload.
+ * ModeratorPayload: Information extracted for JWT-moderator authentication.
  *
- * - Id: Always discussion_board_users.id (top-level user identifier)
- * - Type: must be "moderator" (discriminator for role)
+ * - Id: Always the top-level user_account id (discuss_board_user_accounts.id)
+ * - Type: Must be 'moderator'
  */
 export interface ModeratorPayload {
-  /** Top-level user table ID (the fundamental user identifier in the system). */
+  /** Top-level user_account table ID (UUID). */
   id: string & tags.Format<"uuid">;
 
-  /** Discriminator for the discriminated union type. */
+  /** Discriminator for union. */
   type: "moderator";
 }

@@ -1,0 +1,164 @@
+/// Stores all outbound notification events for discussBoard platform users,
+/// covering email, SMS, push, and in-app notification deliveries. Tracks
+/// delivery status, event type (e.g., reply, moderation, system alerts),
+/// targeted user, message subject/content, and external tracking for
+/// compliance (with references to user account and source event). Enables
+/// searching/filtering notifications per user, event type, or status.
+/// Essential for troubleshooting, analytics, and compliance audits in all
+/// notification delivery workflows. {@link discuss_board_user_accounts.id}
+/// is used as the recipient reference.
+///
+/// @namespace NotificationIntegration
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_notifications {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Intended notification recipient's {@link discuss_board_user_accounts.id}
+  /// field. Captures which user should receive this notification.
+  user_account_id String
+  
+  /// Optional reference to source post/event that triggered the notification.
+  /// Links to {@link discuss_board_posts.id} if applicable.
+  source_post_id String?
+  
+  /// Type of notification event (e.g., reply, moderation, system_alert,
+  /// password_reset, etc.). Drives user routing and compliance logic.
+  event_type String
+  
+  /// Notification delivery channel (e.g., email, sms, push, in_app, webhook).
+  /// Determines integration and delivery workflow.
+  delivery_channel String
+  
+  /// Notification subject line or brief summary. Required for most email/SMS;
+  /// optional for in-app/push; enables full-text search.
+  subject String
+  
+  /// Notification message content. May be templated, localized, or rendered in
+  /// markdown/HTML.
+  body String
+  
+  /// ID assigned by external delivery platforms (e.g., SMTP, SMS gateway).
+  /// Enables troubleshooting and compliance verification.
+  external_message_id String?
+  
+  /// Current delivery status (e.g., pending, delivered, failed, bounced,
+  /// suppressed). Used for retry and compliance workflows.
+  delivery_status String
+  
+  /// Number of delivery attempts made (for failed or retryable messages).
+  delivery_attempts Int
+  
+  /// Timestamp of successful delivery, if occurred. Enables delivery
+  /// tracking/audit.
+  delivered_at DateTime?
+  
+  /// Detailed error message if delivery failed. Useful for compliance,
+  /// troubleshooting, and alerting.
+  error_message String?
+  
+  /// Timestamp when the notification was created in the system (enqueue time).
+  created_at DateTime
+  
+  /// Timestamp of last modification to this notification record
+  /// (status/process/metadata).
+  updated_at DateTime
+  
+  /// Timestamp if this notification is soft-deleted (hidden from normal views,
+  /// retained for audit/compliance).
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  userAccount discuss_board_user_accounts @relation(fields: [user_account_id], references: [id], onDelete: Cascade)
+  sourcePost discuss_board_posts? @relation(fields: [source_post_id], references: [id], onDelete: Cascade)
+  
+  @@index([source_post_id])
+  
+  @@unique([external_message_id])
+  @@index([user_account_id])
+  @@index([event_type])
+  @@index([delivery_status])
+  @@index([created_at])
+}
+
+/// Logs all key integration events between the discussBoard platform and
+/// external partners (e.g., notification delivery APIs, analytics ingestion,
+/// abuse detection/anti-spam, third-party reporting, partner API exchanges).
+/// Each record captures the integration type, status, payload, user (if
+/// applicable), and delivery metadata. Used for troubleshooting, compliance,
+/// SLA monitoring, external partner audits, and system reliability
+/// analytics. {@link discuss_board_user_accounts.id} is optionally included
+/// to relate to a user context.
+///
+/// @namespace NotificationIntegration
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_integration_logs {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Optional user context for the integration event. May reference {@link
+  /// discuss_board_user_accounts.id}, if the event is user-initiated or
+  /// user-facing (e.g., user export, notification relay); nullable for
+  /// system/system-to-system integrations.
+  user_account_id String?
+  
+  /// Type/category of integration event (e.g., notification_delivery,
+  /// analytics, abuse_detection, partner_api, import_export, etc.). Drives
+  /// business logic and compliance reporting.
+  integration_type String
+  
+  /// Integration partner or external service name (e.g., SendGrid, Twilio,
+  /// GoogleAnalytics, Salesforce, etc.).
+  integration_partner String
+  
+  /// Raw payload (request/response/metadata) for audit and troubleshooting.
+  /// Serialized as JSON, XML, etc.
+  payload String
+  
+  /// Current status of integration event (e.g., pending, success, failed,
+  /// retried, quarantined). Required for monitoring/alerting.
+  integration_status String
+  
+  /// External integration reference ID (assigned by partner, e.g., job ID,
+  /// transaction ID, message ID); enables cross-system tracing and compliance.
+  external_reference_id String?
+  
+  /// Associated business event (e.g., post_created, comment_reported,
+  /// moderation_action, user_exported). Improves analytics/monitoring
+  /// granularity.
+  triggered_event String
+  
+  /// Detailed error message if the integration failed or was retried. Useful
+  /// for compliance and technical support.
+  error_message String?
+  
+  /// Timestamp when integration event was recorded (system UTC).
+  created_at DateTime
+  
+  /// Timestamp of last status update/modification.
+  updated_at DateTime
+  
+  /// Timestamp if event is soft-deleted (retained for audit/compliance).
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  userAccount discuss_board_user_accounts? @relation(fields: [user_account_id], references: [id], onDelete: Cascade)
+  
+  @@index([user_account_id])
+  
+  @@unique([external_reference_id])
+  @@index([integration_type])
+  @@index([integration_partner])
+  @@index([integration_status])
+  @@index([created_at])
+}

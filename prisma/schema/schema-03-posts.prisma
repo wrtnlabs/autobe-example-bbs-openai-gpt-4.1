@@ -1,0 +1,180 @@
+/// Central table for user-created posts/topics. Each post belongs to a
+/// member (author), contains a title, body, and can be assigned tags via
+/// discuss_board_post_tags. Enforcement of edit and delete windows is
+/// managed at the application level but tracked for auditing via related
+/// snapshot tables. Post privacy/visibility controls are stored as
+/// business_status. References member as author via user/member table. Used
+/// as the target for comments, reactions, deletion logs, and moderation
+/// actions. Strictly normalized for data integrity.
+///
+/// @namespace Posts
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_posts {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Author's unique identifier, references {@link discuss_board_members.id}.
+  author_id String
+  
+  /// Title of the post, required for identification and search, 5-150 chars
+  /// enforced at application layer.
+  title String
+  
+  /// Main text content of the post, required, 10-10,000 chars enforced at
+  /// application layer.
+  body String
+  
+  /// Post visibility or workflow status (e.g., public, limited, private,
+  /// locked, under_review). Used by access and moderation logic.
+  business_status String
+  
+  /// Creation timestamp (UTC).
+  created_at DateTime
+  
+  /// Last update timestamp (UTC).
+  updated_at DateTime
+  
+  /// Soft delete timestamp, null if not deleted.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  author discuss_board_members @relation(fields: [author_id], references: [id], onDelete: Cascade)
+  
+  discuss_board_post_tags discuss_board_post_tags[]
+  discuss_board_post_edit_histories discuss_board_post_edit_histories[]
+  discuss_board_post_deletion_logs discuss_board_post_deletion_logs[]
+  discuss_board_comments discuss_board_comments[]
+  discuss_board_post_reactions discuss_board_post_reactions[]
+  discuss_board_content_reports discuss_board_content_reports[]
+  discuss_board_moderation_actions discuss_board_moderation_actions[]
+  discuss_board_notifications discuss_board_notifications[]
+  
+  @@index([author_id, created_at])
+  @@index([business_status])
+  @@index([created_at])
+}
+
+/// Assigns tags to posts, representing a junction table for the M:N
+/// relationship between posts and tags (if tags are entity/table-based).
+/// Enforces unique tag per post constraint. Enables topic categorization,
+/// search, and filtering by tag. Referenced in post search/filter endpoints
+/// and analytics.
+///
+/// @namespace Posts
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_post_tags {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Linked post's {@link discuss_board_posts.id}.
+  post_id String
+  
+  /// Tag identifier (UUID). A valid tag UUID as defined in the source tag
+  /// table or system. Relation is not enforced at schema level; see
+  /// documentation for tag source resolution.
+  tag_id String
+  
+  /// Assignment timestamp.
+  created_at DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  post discuss_board_posts @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  
+  @@unique([post_id, tag_id])
+  @@index([tag_id])
+}
+
+/// History and audit trail of post edits for compliance and moderation
+/// review. Captures each point-in-time version of a post, including all
+/// changed content, author, and timestamps. Enables rollback, user view of
+/// edit log, and accountability for all changes. Model is append-only and
+/// never directly modified post-creation.
+///
+/// @namespace Posts
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_post_edit_histories {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Original post's {@link discuss_board_posts.id}.
+  post_id String
+  
+  /// User/member who made the edit, references {@link
+  /// discuss_board_members.id}.
+  editor_id String
+  
+  /// Edited title snapshot.
+  edited_title String
+  
+  /// Edited body/content snapshot.
+  edited_body String
+  
+  /// Optional reason/annotation for edit (e.g., typo fix, clarification
+  /// update).
+  edit_reason String?
+  
+  /// When the edit occurred (UTC).
+  edit_timestamp DateTime
+  
+  //----
+  // RELATIONS
+  //----
+  post discuss_board_posts @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  editor discuss_board_members @relation(fields: [editor_id], references: [id], onDelete: Cascade)
+  
+  @@index([post_id])
+  @@index([editor_id])
+  @@index([edit_timestamp])
+}
+
+/// Audit log capturing all deletion events for posts (soft or hard). Records
+/// who deleted the post, when, and the reason. Enables regulatory
+/// compliance, investigation, and dispute resolution. Never deleted/updated
+/// after creation; read-only audit record.
+///
+/// @namespace Posts
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_post_deletion_logs {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Deleted post's {@link discuss_board_posts.id}.
+  post_id String
+  
+  /// Moderator/member/administrator who performed deletion, references
+  /// existing discuss_board_members or higher privilege role.
+  actor_id String
+  
+  /// When the deletion occurred (UTC).
+  deletion_timestamp DateTime
+  
+  /// Business or regulatory reason for deletion, e.g., user request,
+  /// moderation action, policy violation. For compliance/audit.
+  deletion_reason String?
+  
+  //----
+  // RELATIONS
+  //----
+  post discuss_board_posts @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  actor discuss_board_members @relation(fields: [actor_id], references: [id], onDelete: Cascade)
+  
+  @@index([post_id])
+  @@index([actor_id])
+  @@index([deletion_timestamp])
+}

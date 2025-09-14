@@ -1,0 +1,410 @@
+/// Represents unauthenticated or temporary visitors tracked for analytics,
+/// onboarding funnels, and guest-to-member conversion. Does not include any
+/// privileged actions. Linked to analytics pipelines and business event
+/// logs. Not tied to posts or comments directly.
+///
+/// @namespace Identity
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_guests {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// IP address of the guest user for analytics and security monitoring.
+  ip_address String
+  
+  /// User agent string representing the guest's browser/device for analytics.
+  user_agent String
+  
+  /// Origin URL where the guest came from for conversion analysis.
+  referer String?
+  
+  /// Timestamp when guest was first observed.
+  created_at DateTime
+  
+  /// Last analytics-update timestamp.
+  updated_at DateTime
+  
+  /// Timestamp if guest data is anonymized for privacy removal.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  @@index([ip_address, created_at])
+}
+
+/// Registered member accounts representing authenticated users with ability
+/// to participate. Each member can have escalation to
+/// moderator/administrator or downgrade. Linked to
+/// discuss_board_user_accounts for authentication and can be tied to
+/// discuss_board_user_profiles.
+///
+/// @namespace Identity
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_members {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// User account for authentication. {@link discuss_board_user_accounts.id}
+  user_account_id String
+  
+  /// Member's public display nickname.
+  nickname String
+  
+  /// Current status (active, suspended, banned, etc.).
+  status String
+  
+  /// Signup timestamp.
+  created_at DateTime
+  
+  /// Last member profile update timestamp.
+  updated_at DateTime
+  
+  /// Timestamp for soft deletion or account anonymization.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  userAccount discuss_board_user_accounts @relation(fields: [user_account_id], references: [id], onDelete: Cascade)
+  
+  discuss_board_moderators discuss_board_moderators?
+  discuss_board_administrators discuss_board_administrators?
+  discuss_board_user_profiles discuss_board_user_profiles?
+  discuss_board_user_notification_preferences discuss_board_user_notification_preferences?
+  discuss_board_posts discuss_board_posts[]
+  discuss_board_post_edit_histories discuss_board_post_edit_histories[]
+  discuss_board_post_deletion_logs discuss_board_post_deletion_logs[]
+  discuss_board_comments discuss_board_comments[]
+  discuss_board_comment_edit_histories discuss_board_comment_edit_histories[]
+  discuss_board_post_reactions discuss_board_post_reactions[]
+  discuss_board_comment_reactions discuss_board_comment_reactions[]
+  discuss_board_content_reports discuss_board_content_reports[]
+  discuss_board_moderation_actions discuss_board_moderation_actions[]
+  discuss_board_appeals discuss_board_appeals[]
+  discuss_board_moderation_logs discuss_board_moderation_logs[]
+  
+  @@unique([user_account_id])
+  
+  @@unique([nickname])
+  @@index([status])
+}
+
+/// Moderator role accounts, each linked to exactly one member. Grants
+/// enforcement, review, and moderation privileges. Tracks authority
+/// escalation. Has independent status and audit window for
+/// assignment/revocation.
+///
+/// @namespace Identity
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_moderators {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Target member account granted moderator rights. {@link
+  /// discuss_board_members.id}
+  member_id String
+  
+  /// Administrator who granted moderator role. {@link
+  /// discuss_board_administrators.id}
+  assigned_by_administrator_id String
+  
+  /// Moderator assignment timestamp.
+  assigned_at DateTime
+  
+  /// Timestamp when moderator role was revoked, if applicable.
+  revoked_at DateTime?
+  
+  /// Moderator role status (active, suspended, revoked).
+  status String
+  
+  /// Creation timestamp for audit.
+  created_at DateTime
+  
+  /// Update timestamp for auditing changes.
+  updated_at DateTime
+  
+  /// Timestamp for soft deletion/removal from moderator pool.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  member discuss_board_members @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  
+  discuss_board_moderation_actions discuss_board_moderation_actions[]
+  
+  @@unique([member_id])
+  
+  @@index([assigned_by_administrator_id])
+}
+
+/// Administrator/superuser role accounts, linked to members. Possesses
+/// comprehensive management, escalation, and audit powers. May assign or
+/// revoke other roles (including moderators) and configure global system
+/// settings.
+///
+/// @namespace Identity
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_administrators {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Target member promoted to administrator. {@link discuss_board_members.id}
+  member_id String
+  
+  /// Administrator who performed the escalation. {@link
+  /// discuss_board_administrators.id}
+  escalated_by_administrator_id String
+  
+  /// Promotion/assignment timestamp.
+  escalated_at DateTime
+  
+  /// Timestamp if removed from admin role/privileges revoked.
+  revoked_at DateTime?
+  
+  /// Administrator status (active, resigned, suspended).
+  status String
+  
+  /// Timestamp of admin role creation for auditing.
+  created_at DateTime
+  
+  /// Timestamp of last admin role update/audit.
+  updated_at DateTime
+  
+  /// Timestamp to support soft delete/audit disablement.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  member discuss_board_members @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  
+  @@unique([member_id])
+  
+  @@index([status])
+}
+
+/// Core authentication/identity records for platform users. Decouples
+/// authentication from role, supporting locked-out or staged accounts, and
+/// multi-role escalation. Used as authoritative linkage for login, JWT
+/// sessions.
+///
+/// @namespace Identity
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_user_accounts {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Unique email address identifying the platform user.
+  email String
+  
+  /// BCrypt/argon hashed password (never plain text).
+  password_hash String
+  
+  /// Whether user completed email verification process required for elevated
+  /// privileges.
+  email_verified Boolean
+  
+  /// Account status (pending, active, locked, disabled, etc.).
+  status String
+  
+  /// Timestamp of most recent login/session creation.
+  last_login_at DateTime?
+  
+  /// Initial account creation timestamp.
+  created_at DateTime
+  
+  /// Timestamp for credential update (e.g., password change).
+  updated_at DateTime
+  
+  /// Anonymization/removal date for deleted accounts.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  discuss_board_privacy_logs_of_actor_user_account_id discuss_board_privacy_logs[] @relation("discuss_board_privacy_logs_of_actor_user_account_id")
+  discuss_board_privacy_logs_of_data_subject_user_account_id discuss_board_privacy_logs[] @relation("discuss_board_privacy_logs_of_data_subject_user_account_id")
+  discuss_board_consent_records discuss_board_consent_records[]
+  discuss_board_members discuss_board_members?
+  discuss_board_jwt_sessions discuss_board_jwt_sessions[]
+  discuss_board_comment_deletion_logs discuss_board_comment_deletion_logs[]
+  discuss_board_notifications discuss_board_notifications[]
+  discuss_board_integration_logs discuss_board_integration_logs[]
+  
+  @@unique([email])
+  @@index([status])
+}
+
+/// Tracks active JWT tokens and sessions for user authentication. Used for
+/// session revocation, device management, and refresh flows. Relates to
+/// discuss_board_user_accounts as FK.
+///
+/// @namespace Identity
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_jwt_sessions {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Foreign key to user account that owns this session. {@link
+  /// discuss_board_user_accounts.id}
+  user_account_id String
+  
+  /// JWT unique identifier (jti claim).
+  jwt_id String
+  
+  /// Hashed refresh token for this session, for secure revocation.
+  refresh_token_hash String
+  
+  /// Logged-in device/browser info for management.
+  user_agent String
+  
+  /// Origin IP address used at login time.
+  ip_address String
+  
+  /// JWT/session creation/issuance time.
+  issued_at DateTime
+  
+  /// JWT/session absolute expiration time.
+  expires_at DateTime
+  
+  /// Time the session was forcibly revoked before expiry.
+  revoked_at DateTime?
+  
+  /// Session object creation time.
+  created_at DateTime
+  
+  /// Session object last update (device status, etc.).
+  updated_at DateTime
+  
+  /// Date/time if session data was hard-deleted for cleanup or privacy.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  userAccount discuss_board_user_accounts @relation(fields: [user_account_id], references: [id], onDelete: Cascade)
+  
+  @@unique([jwt_id])
+  @@index([user_account_id, expires_at])
+}
+
+/// Profile metadata table for user display, including avatar, bio, and
+/// optional personalization fields. Tied to a member, managed through
+/// profile-edit UIs, never independently instantiated from business
+/// perspective.
+///
+/// @namespace Identity
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_user_profiles {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Foreign key to the registered member this profile belongs to. {@link
+  /// discuss_board_members.id}
+  member_id String
+  
+  /// User's chosen display name for presentation (may override registered
+  /// nickname).
+  display_name String?
+  
+  /// Short biography or introduction written by the user (may include links,
+  /// hashtags, etc.).
+  bio String?
+  
+  /// URI to user-chosen avatar/profile image.
+  avatar_uri String?
+  
+  /// Optional location or timezone string for the user.
+  location String?
+  
+  /// Link to user's personal website (optional).
+  website String?
+  
+  /// When profile object was created.
+  created_at DateTime
+  
+  /// Last update timestamp from user or admin.
+  updated_at DateTime
+  
+  /// Timestamp for profile removal/anonymization.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  member discuss_board_members @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  
+  @@unique([member_id])
+  
+  @@index([display_name])
+}
+
+/// Stores per-user notification delivery and channel preferences, such as
+/// email/SMS/push, per event-type, etc. Used to manage communication flows
+/// and compliance. Each record points to a member, must be editable via
+/// account UI.
+///
+/// @namespace Identity
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_user_notification_preferences {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Member account whose notification preferences are configured. {@link
+  /// discuss_board_members.id}
+  member_id String
+  
+  /// Whether user receives system email notifications.
+  email_notifications_enabled Boolean
+  
+  /// Whether user receives SMS notifications for critical flows.
+  sms_notifications_enabled Boolean
+  
+  /// Whether user receives push notifications in mobile/web apps.
+  push_notifications_enabled Boolean
+  
+  /// Whether user agrees to receive newsletters and announcements.
+  newsletter_opt_in Boolean
+  
+  /// Timestamp when preferences were created.
+  created_at DateTime
+  
+  /// Timestamp when preferences were last updated.
+  updated_at DateTime
+  
+  /// Soft delete timestamp for user opt-out or data privacy action.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  member discuss_board_members @relation(fields: [member_id], references: [id], onDelete: Cascade)
+  
+  @@unique([member_id])
+}

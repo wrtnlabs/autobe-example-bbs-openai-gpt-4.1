@@ -1,14 +1,11 @@
 generator client {
-  provider        = "prisma-client-js"
-  previewFeatures = ["postgresqlExtensions", "views"]
-  binaryTargets   = ["native"]
+  provider = "prisma-client-js"
 }
 datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")
-  extensions = [pg_trgm]
+  provider = "sqlite"
+  url      = "file:../../data.db"
 }
 generator markdown {
   provider = "prisma-markdown"
-  output   = "../docs/ERD.md"
+  output   = "../../docs/ERD.md"
 }

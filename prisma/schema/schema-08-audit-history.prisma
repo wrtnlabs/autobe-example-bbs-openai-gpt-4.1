@@ -1,0 +1,67 @@
+/// Global, cross-entity business audit log for tracking all major actions
+/// and state changes (including user activity, content edits/deletions,
+/// moderation actions, critical admin events, and consent/compliance
+/// changes). Allows compliance audits, forensic analysis, and business
+/// metric tracking. Supports both entity-specific and system-wide events,
+/// referencing the actor (user/admin/moderator) and target object
+/// (table/type/id) polymorphically. Designed for centralized history queries
+/// and external export.
+///
+/// @namespace AuditHistory
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_global_audit_logs {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// ID of the actor responsible for this event (may reference
+  /// discuss_board_user_accounts, discuss_board_members,
+  /// discuss_board_adminstrators, etc.; polymorphic usage, so FK is not
+  /// enforced).
+  actor_id String?
+  
+  /// Type of actor for this audit event. Examples: 'member', 'moderator',
+  /// 'administrator', 'guest', or service/automation type.
+  actor_type String
+  
+  /// Business-level category of the audit event. E.g., 'post_edit',
+  /// 'comment_delete', 'user_login', 'role_escalation', 'moderation_action',
+  /// 'consent_update', etc.
+  action_category String
+  
+  /// Target table/entity type for the affected object, e.g.,
+  /// 'discuss_board_posts', 'discuss_board_comments', 'discuss_board_members',
+  /// etc.
+  target_table String
+  
+  /// UUID of the affected object in the target table/entity. Polymorphic—can
+  /// refer to post/comment/user/settings as needed.
+  target_id String?
+  
+  /// Optional serialized event details/context (JSON or text) containing
+  /// pre-/post-state, reason, IP/user-agent, or expanded change info for
+  /// audit/external export. NULL for events where no further details are
+  /// captured.
+  event_payload String?
+  
+  /// Brief human-readable description of this audit event for API
+  /// search/export. Example: 'Moderator deleted a comment for violating
+  /// policy.'
+  event_description String
+  
+  /// Time this audit event was recorded (UTC, immutable).
+  created_at DateTime
+  
+  /// Soft delete marker for this audit log record. Used for audit retention;
+  /// if null, audit entry is active.
+  deleted_at DateTime?
+  
+  //----
+  // RELATIONS
+  //----
+  @@unique([actor_type, actor_id, action_category, target_table, target_id, created_at], map: "discuss_board_global_audit_logs_actor_type_actor_id_ac_895cce2a")
+  @@index([action_category, created_at])
+  @@index([target_table, target_id, created_at], map: "discuss_board_global_audit_logs_target_table_target_id_7b1d8985")
+}

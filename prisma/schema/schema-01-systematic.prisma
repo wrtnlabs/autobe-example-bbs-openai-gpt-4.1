@@ -1,249 +1,161 @@
-/// Represents discussion categories within the board (e.g. Politics,
-/// Economics, Society). Used for organizing posts and threads into topical
-/// groups. Supports CRUD and independent administration. Categories can have
-/// multiple tags via discussion_board_category_tag_relations. Frequently
-/// referenced by posts for content classification.
+/// Global system configuration for the discussBoard platform. Holds
+/// platform-wide settings such as max post/comment length, maintenance mode
+/// flag, notification policies, data retention periods, or any feature flag
+/// toggles. Managed exclusively by administrators, sets the foundation for
+/// all application logic and enforcement. Only one row should exist at any
+/// time.
 ///
 /// @namespace Systematic
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_categories {
+model discuss_board_settings {
   //----
   // COLUMNS
   //----
   /// Primary Key.
-  id String @id @db.Uuid
+  id String @id
   
-  /// Category display name. Unique and user-facing (e.g. 'Politics').
-  name String
+  /// JSON string of system-wide configurable options such as ratios, toggle
+  /// flags, policy versions, and detailed policy parameters.
+  config_json String
   
-  /// Human-readable description for moderators and users.
+  /// Timestamp of when this settings record was created.
+  created_at DateTime
+  
+  /// Timestamp of last update to settings record.
+  updated_at DateTime
+}
+
+/// Catalog of keywords, phrases, or regexes forbidden from user content due
+/// to policy violations (e.g., hate speech, profanity, spam). Used for
+/// filtering post and comment content at creation or update. Managed by
+/// administrators and updated as guideline policies evolve. Each word or
+/// expression is unique and case-insensitive.
+///
+/// @namespace Systematic
+/// @author AutoBE - https://github.com/wrtnlabs/autobe
+model discuss_board_forbidden_words {
+  //----
+  // COLUMNS
+  //----
+  /// Primary Key.
+  id String @id
+  
+  /// Forbidden word, phrase, or regex pattern (case-insensitive).
+  expression String
+  
+  /// Administrative description, business rationale, or policy context for
+  /// this forbidden word or pattern.
   description String?
   
-  /// Whether this category is currently active and visible to users.
-  is_active Boolean
+  /// Time this forbidden word or pattern was registered.
+  created_at DateTime
   
-  /// Manual sort order for displaying categories.
-  sort_order Int @db.Integer
+  /// Last update time for this record.
+  updated_at DateTime
   
-  /// Timestamp when category was created.
-  created_at DateTime @db.Timestamptz
-  
-  /// Timestamp when category was last updated.
-  updated_at DateTime @db.Timestamptz
-  
-  /// Timestamp for soft deletion; null means not deleted.
-  deleted_at DateTime? @db.Timestamptz
+  /// Soft delete flag: time this entry was removed by administrators, if
+  /// applicable.
+  deleted_at DateTime?
   
   //----
   // RELATIONS
   //----
-  discussion_board_category_tag_relations discussion_board_category_tag_relations[]
-  
-  @@unique([name])
-  @@index([is_active])
+  @@unique([expression])
 }
 
-/// Vocabulary of tags that can be assigned to categories and posts. Tags
-/// enable faceted search, topic suggestions, and content filtering. Tags are
-/// managed independently; supports CRUD and list operations. Tags can be
-/// assigned to many categories (see
-/// discussion_board_category_tag_relations).
+/// Audit records for all privacy-sensitive actions taken on user data.
+/// Entries document accesses, exports, deletions, and policy updates
+/// impacting user information, with who did it, which data subject,
+/// operation type, outcome, and timestamp. Provides a robust audit trail for
+/// privacy compliance and incident response. References user/account ids in
+/// other tables for traceability, but never stores confidential data
+/// directly.
 ///
 /// @namespace Systematic
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_tags {
+model discuss_board_privacy_logs {
   //----
   // COLUMNS
   //----
   /// Primary Key.
-  id String @id @db.Uuid
+  id String @id
   
-  /// Tag label as seen by users. Must be unique (case-insensitive).
-  label String
+  /// Reference to the user account that performed the privacy-related action.
+  /// {@link discuss_board_user_accounts.id}.
+  actor_user_account_id String?
   
-  /// Optional human-readable description for users/moderators.
-  description String?
+  /// Reference to the data subject impacted by the action (could be same as
+  /// actor, or another user). {@link discuss_board_user_accounts.id}.
+  data_subject_user_account_id String?
   
-  /// Whether the tag can currently be assigned.
-  is_active Boolean
-  
-  /// Timestamp when tag was registered.
-  created_at DateTime @db.Timestamptz
-  
-  /// Timestamp when tag was last updated.
-  updated_at DateTime @db.Timestamptz
-  
-  /// Timestamp for soft deletion; null = not deleted.
-  deleted_at DateTime? @db.Timestamptz
-  
-  //----
-  // RELATIONS
-  //----
-  discussion_board_category_tag_relations discussion_board_category_tag_relations[]
-  
-  @@unique([label])
-  @@index([is_active])
-}
-
-/// Junction table for many-to-many relation between categories and tags.
-/// Allows a category to have multiple tags and vice versa. Only stores
-/// references; maintains referential integrity and disables duplicates.
-/// Managed internally; users assign tags to categories via admin/control
-/// panels.
-///
-/// @namespace Systematic
-/// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_category_tag_relations {
-  //----
-  // COLUMNS
-  //----
-  /// Primary Key.
-  id String @id @db.Uuid
-  
-  /// Linked category's {@link discussion_board_categories.id}
-  discussion_board_category_id String @db.Uuid
-  
-  /// Linked tag's {@link discussion_board_tags.id}
-  discussion_board_tag_id String @db.Uuid
-  
-  /// Timestamp when this association was created.
-  created_at DateTime @db.Timestamptz
-  
-  //----
-  // RELATIONS
-  //----
-  category discussion_board_categories @relation(fields: [discussion_board_category_id], references: [id], onDelete: Cascade, map: "discussion_board_category_tag_relations_discussion_boa_d71922fb")
-  tag discussion_board_tags @relation(fields: [discussion_board_tag_id], references: [id], onDelete: Cascade, map: "discussion_board_category_tag_relations_discussion_boa_a933acc4")
-  
-  @@index([discussion_board_tag_id], map: "discussion_board_category_tag_relations_discussion_boa_0c679702")
-  
-  @@unique([discussion_board_category_id, discussion_board_tag_id], map: "discussion_board_category_tag_relations_discussion_boa_28e1b254")
-}
-
-/// Holds global/system-wide configuration values (e.g., max post length,
-/// flags thresholds, maintenance flags). Settings are key-value, with
-/// standard metadata, allowing dynamic system reconfiguration without code
-/// deployments. Supports secure audit of changes.
-///
-/// @namespace Systematic
-/// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_settings {
-  //----
-  // COLUMNS
-  //----
-  /// Primary Key.
-  id String @id @db.Uuid
-  
-  /// Unique identifier for this setting (e.g. 'max_post_length',
-  /// 'flag_threshold').
-  key String
-  
-  /// Serialized config value for interpretation by the app (stringified JSON
-  /// for complex data if needed).
-  value String
-  
-  /// Human-intelligible explanation of this setting.
-  description String?
-  
-  /// Whether this setting is system-level (vs business-level).
-  is_system Boolean
-  
-  /// Timestamp when setting was registered.
-  created_at DateTime @db.Timestamptz
-  
-  /// Timestamp when setting was last updated.
-  updated_at DateTime @db.Timestamptz
-  
-  /// Timestamp for soft deletion.
-  deleted_at DateTime? @db.Timestamptz
-  
-  //----
-  // RELATIONS
-  //----
-  @@unique([key])
-  @@index([is_system])
-}
-
-/// Audit log for all major platform actions: configuration changes, role
-/// changes, moderation decisions, and critical system events. Each record
-/// includes metadata and references to the actor where possible (e.g., user,
-/// moderator, admin). Used for legal, compliance, and business/technical
-/// auditing.
-///
-/// @namespace Systematic
-/// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_audit_logs {
-  //----
-  // COLUMNS
-  //----
-  /// Primary Key.
-  id String @id @db.Uuid
-  
-  /// Optional reference to the acting user (visitor, user, moderator, or
-  /// admin), if applicable. Null for system actions.
-  actor_id String? @db.Uuid
-  
-  /// Role of acting entity at time of action ('visitor', 'user', 'moderator',
-  /// 'admin', or 'system').
-  actor_role String
-  
-  /// Type/category of action performed (e.g., 'config_update',
-  /// 'role_assignment', 'moderation', 'login').
+  /// Type of privacy operation (access, export, delete, policy update, consent
+  /// change, etc.).
   action_type String
   
-  /// Subject entity/object of the action. E.g., which setting, user, post,
-  /// etc. (Flexible string).
-  target_object String?
-  
-  /// Human-readable description, suited for compliance reviews.
+  /// Business context or justification for the privacy operation, including
+  /// outcome or relevant audit notes.
   description String?
   
-  /// Action event timestamp; represents when it occurred.
-  created_at DateTime @db.Timestamptz
+  /// Result of the privacy action (success, failure, partial). For audit
+  /// reporting.
+  result_status String
+  
+  /// Timestamp when this action was performed (UTC).
+  created_at DateTime
   
   //----
   // RELATIONS
   //----
-  discussion_board_action_logs discussion_board_action_logs[]
+  actorUserAccount discuss_board_user_accounts? @relation("discuss_board_privacy_logs_of_actor_user_account_id", fields: [actor_user_account_id], references: [id], onDelete: Cascade)
+  dataSubjectUserAccount discuss_board_user_accounts? @relation("discuss_board_privacy_logs_of_data_subject_user_account_id", fields: [data_subject_user_account_id], references: [id], onDelete: Cascade)
   
-  @@index([actor_id])
   @@index([created_at])
-  @@index([action_type(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([actor_user_account_id, created_at])
+  @@index([data_subject_user_account_id, created_at], map: "discuss_board_privacy_logs_data_subject_user_account_i_dd2715cd")
 }
 
-/// Detailed per-action log entries as a subsidiary to the audit log. Used
-/// for lower-level action tracing, debugging, and advanced compliance. Each
-/// action log entry references audit logs and provides granular metadata
-/// (status, payloads, errors, etc.). Not independently user-facing; supports
-/// system/compliance tracing.
+/// Stores individual user consent events for privacy, terms of service, or
+/// other legal agreements. Contains who provided consent, policy/document
+/// version, consent action (granted, revoked, updated), and timestamp.
+/// Required for legal defensibility and to fulfill user data rights
+/// requests. Each event is preserved historically—this table acts as an
+/// append-only log.
 ///
 /// @namespace Systematic
 /// @author AutoBE - https://github.com/wrtnlabs/autobe
-model discussion_board_action_logs {
+model discuss_board_consent_records {
   //----
   // COLUMNS
   //----
   /// Primary Key.
-  id String @id @db.Uuid
+  id String @id
   
-  /// Reference to the master audit log entry {@link
-  /// discussion_board_audit_logs.id}
-  discussion_board_audit_log_id String @db.Uuid
+  /// User account giving or updating consent. {@link
+  /// discuss_board_user_accounts.id}.
+  user_account_id String
   
-  /// Outcome of the action (e.g., 'success', 'fail', 'partial', or custom).
-  status String
+  /// Type of policy for which consent is being tracked (e.g. 'privacy_policy',
+  /// 'terms_of_service', 'marketing_opt_in').
+  policy_type String
   
-  /// Serialized contextual metadata (JSON). As detailed as needed for
-  /// compliance or debugging.
-  metadata String?
+  /// Version or identifier of the policy/legal document the user is consenting
+  /// to.
+  policy_version String
   
-  /// Timestamp at which the action log was recorded.
-  created_at DateTime @db.Timestamptz
+  /// What the event represents: (e.g. 'granted', 'revoked', 'updated').
+  consent_action String
+  
+  /// Optional business notes regarding the consent record, such as rationale
+  /// or evidence (IP address, device, etc.).
+  description String?
+  
+  /// Timestamp when this consent record/event was created (UTC).
+  created_at DateTime
   
   //----
   // RELATIONS
   //----
-  auditLog discussion_board_audit_logs @relation(fields: [discussion_board_audit_log_id], references: [id], onDelete: Cascade)
+  userAccount discuss_board_user_accounts @relation(fields: [user_account_id], references: [id], onDelete: Cascade)
   
-  @@index([discussion_board_audit_log_id])
+  @@index([user_account_id, policy_type, policy_version, created_at], map: "discuss_board_consent_records_user_account_id_policy_t_50e60c81")
 }

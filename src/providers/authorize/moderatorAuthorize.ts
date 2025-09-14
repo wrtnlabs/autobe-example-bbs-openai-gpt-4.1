@@ -5,15 +5,12 @@ import { jwtAuthorize } from "./jwtAuthorize";
 import { ModeratorPayload } from "../../decorators/payload/ModeratorPayload";
 
 /**
- * JWT authentication and database validation for the moderator role.
- * - Verifies Bearer token and decodes using shared jwtAuthorize.
- * - Checks payload.type for proper role enforcement (must be 'moderator').
- * - Confirms corresponding moderator exists, is active, and not deleted/revoked/suspended in discussion_board_moderators and user table.
- * - Always uses payload.id (top-level user ID from discussion_board_users) in query.
+ * Moderator Authorization Provider
  *
- * @param request HTTP request with headers.authorization (Bearer {token})
- * @returns ModeratorPayload - decoded payload if authenticated and authorized
- * @throws ForbiddenException if not moderator or entity invalid/revoked
+ * Authenticates JWT for moderator role, verifies moderator status and linkage, checks for account validity.
+ * - The JWT payload.id MUST be the top-level user_account ID (discuss_board_user_accounts.id).
+ * - Moderator role is linked via discuss_board_members and discuss_board_moderators (user_account → member → moderator).
+ * - Ensures all soft-delete, revoked, or inactive status are enforced on all related identities.
  */
 export async function moderatorAuthorize(request: {
   headers: {
@@ -26,35 +23,32 @@ export async function moderatorAuthorize(request: {
     throw new ForbiddenException(`You're not ${payload.type}`);
   }
 
-  // Check for existence and activeness in moderator table (no 'user' in where)
-  const moderator = await MyGlobal.prisma.discussion_board_moderators.findFirst({
+  // Step 1: Find active member via user_account_id
+  const member = await MyGlobal.prisma.discuss_board_members.findFirst({
     where: {
-      user_id: payload.id, // Link moderator -> user
-      is_active: true,
-      revoked_at: null,
+      user_account_id: payload.id,
       deleted_at: null,
-      OR: [
-        { suspended_until: null },
-        { suspended_until: { lt: new Date() } },
-      ],
+      status: "active"
     },
+    select: { id: true }
+  });
+
+  if (member === null) {
+    throw new ForbiddenException("You're not an active member");
+  }
+
+  // Step 2: Find active moderator by member_id, ensure no revoked_at, not deleted, status active
+  const moderator = await MyGlobal.prisma.discuss_board_moderators.findFirst({
+    where: {
+      member_id: member.id,
+      deleted_at: null,
+      revoked_at: null,
+      status: "active"
+    }
   });
 
   if (moderator === null) {
-    throw new ForbiddenException("You're not enrolled or your moderator privileges have been revoked.");
-  }
-
-  // Additional check: ensure user account itself is valid (not deleted or suspended)
-  const user = await MyGlobal.prisma.discussion_board_users.findFirst({
-    where: {
-      id: payload.id,
-      deleted_at: null,
-      is_suspended: false,
-    },
-  });
-
-  if (user === null) {
-    throw new ForbiddenException("Your user account is inactive, deleted, or suspended.");
+    throw new ForbiddenException("You're not an active moderator");
   }
 
   return payload;

@@ -5,18 +5,23 @@ import { Singleton } from "tstl";
 import { moderatorAuthorize } from "../providers/authorize/moderatorAuthorize";
 
 /**
- * Parameter decorator for requiring moderator authentication and injecting ModeratorPayload.
- * Automatically applies Bearer token security scheme to Swagger docs.
+ * ModeratorAuth Decorator
  *
- * Usage: Use as a parameter decorator in controller methods:
- *   async someAction(@ModeratorAuth() moderator: ModeratorPayload)...
+ * Injects the authenticated ModeratorPayload into controller route handlers after verifying JWT and role.
+ * Adds Bearer security requirement to Swagger/OpenAPI.
  */
-export const ModeratorAuth = ():
-  ParameterDecorator =>
-  (target, propertyKey, parameterIndex) => {
+export const ModeratorAuth =
+  (): ParameterDecorator =>
+  (
+    target: object,
+    propertyKey: string | symbol | undefined,
+    parameterIndex: number,
+  ): void => {
     SwaggerCustomizer((props) => {
       props.route.security ??= [];
-      props.route.security.push({ bearer: [] });
+      props.route.security.push({
+        bearer: [],
+      });
     })(target, propertyKey as string, undefined!);
     singleton.get()(target, propertyKey, parameterIndex);
   };

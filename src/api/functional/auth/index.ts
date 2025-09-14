@@ -1,4 +1,4 @@
-export * as visitor from "./visitor";
-export * as user from "./user";
-export * as moderator from "./moderator";
-export * as admin from "./admin";
+export * as guest from "./guest/index";
+export * as member from "./member/index";
+export * as moderator from "./moderator/index";
+export * as administrator from "./administrator/index";

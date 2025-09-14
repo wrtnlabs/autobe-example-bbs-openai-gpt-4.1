@@ -1,2 +1,2 @@
-export * as auth from "./auth";
-export * as discussionBoard from "./discussionBoard";
+export * as auth from "./auth/index";
+export * as discussBoard from "./discussBoard/index";
